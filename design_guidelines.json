@@ -1,0 +1,154 @@
+{
+  "brand_identity": {
+    "name": "CampusTransit",
+    "archetype": "Soft Utility",
+    "emotional_tone": "Reliable, Modern, Alert, Connected",
+    "typography": {
+      "headings": {
+        "family": "Manrope, sans-serif",
+        "weights": ["600", "700", "800"],
+        "usage": "Use for all page titles, modal headers, and major stats."
+      },
+      "body": {
+        "family": "IBM Plex Sans, sans-serif",
+        "weights": ["400", "500"],
+        "usage": "Use for all standard text, labels, and data inputs."
+      },
+      "mono": {
+        "family": "JetBrains Mono, monospace",
+        "usage": "Use for bus numbers, license plates, and timestamps."
+      }
+    },
+    "colors": {
+      "primary": {
+        "name": "Electric Indigo",
+        "hex": "#4F46E5",
+        "tailwind": "bg-indigo-600",
+        "usage": "Primary buttons, active states, brand accents."
+      },
+      "secondary": {
+        "name": "Transit Amber",
+        "hex": "#F59E0B",
+        "tailwind": "bg-amber-500",
+        "usage": "Bus icons, warnings, 'In Transit' status."
+      },
+      "alert": {
+        "name": "Radical Red",
+        "hex": "#EF4444",
+        "tailwind": "bg-red-500",
+        "usage": "SOS buttons, emergency banners, error states."
+      },
+      "success": {
+        "name": "Signal Green",
+        "hex": "#10B981",
+        "tailwind": "bg-emerald-500",
+        "usage": "On-time status, success toasts."
+      },
+      "background": {
+        "light": "#F8FAFC",
+        "dark": "#0F172A",
+        "glass": "bg-white/80 backdrop-blur-xl border-white/20"
+      }
+    }
+  },
+  "visual_enhancers": {
+    "glassmorphism": {
+      "usage": "Bottom sheets, floating nav bars, map overlays.",
+      "classes": "bg-white/90 dark:bg-slate-900/90 backdrop-blur-md border border-white/20 shadow-xl"
+    },
+    "shadows": {
+      "card": "shadow-[0_8px_30px_rgb(0,0,0,0.04)]",
+      "floating": "shadow-[0_20px_50px_rgb(0,0,0,0.1)]"
+    },
+    "borders": {
+      "subtle": "border border-slate-200 dark:border-slate-800",
+      "active": "border-2 border-indigo-500"
+    }
+  },
+  "layout_strategies": {
+    "student_view": {
+      "structure": "Map-First",
+      "components": [
+        "Full-screen Map Container (z-0)",
+        "Floating Search Pill (Top, z-10)",
+        "Interactive Bottom Sheet (Bottom, z-20, draggable)",
+        "Bus Detail Card (Slide-up)"
+      ],
+      "spacing": "Compact, mobile-optimized (p-4, gap-3)"
+    },
+    "driver_view": {
+      "structure": "Cockpit Mode",
+      "components": [
+        "High-Contrast Status Header",
+        "Massive Action Buttons (Start Trip, Stop)",
+        "SOS Panic Button (Always visible, bottom-right)",
+        "Route Timeline (Vertical, large text)"
+      ],
+      "spacing": "Generous, touch-friendly (p-6, gap-6, min-h-[60px] buttons)"
+    },
+    "admin_view": {
+      "structure": "Control Room Grid",
+      "components": [
+        "Sidebar Nav",
+        "Live Map Widget (Col-span-2 Row-span-2)",
+        "Active Buses List (Col-span-1)",
+        "Emergency Feed (Col-span-1, Red border if active)"
+      ],
+      "spacing": "Dense, data-heavy (p-2, gap-2, text-sm)"
+    }
+  },
+  "component_rules": {
+    "buttons": {
+      "primary": "rounded-full px-8 py-3 font-bold shadow-lg hover:shadow-indigo-500/25 transition-all active:scale-95",
+      "sos": "rounded-xl bg-red-600 text-white font-black uppercase tracking-widest animate-pulse hover:animate-none hover:bg-red-700 shadow-red-500/50",
+      "ghost": "hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg"
+    },
+    "cards": {
+      "default": "bg-white dark:bg-slate-900 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm hover:shadow-md transition-shadow",
+      "glass": "bg-white/80 backdrop-blur-md border border-white/50 rounded-t-3xl shadow-[0_-10px_40px_rgba(0,0,0,0.1)]"
+    },
+    "inputs": {
+      "search": "rounded-full bg-white shadow-lg border-0 pl-12 h-12 text-lg focus:ring-2 focus:ring-indigo-500"
+    }
+  },
+  "assets": {
+    "images": {
+      "bus_hero": "https://images.unsplash.com/photo-1582203513826-d5887ec1a982?crop=entropy&cs=srgb&fm=jpg&q=85",
+      "student_hero": "https://images.unsplash.com/photo-1731213562305-0152c6946bdc?crop=entropy&cs=srgb&fm=jpg&q=85",
+      "driver_hero": "https://images.pexels.com/photos/15838425/pexels-photo-15838425.jpeg",
+      "map_placeholder": "https://images.unsplash.com/photo-1524661135-423995f22d0b?auto=format&fit=crop&q=80"
+    },
+    "icons": {
+      "library": "lucide-react",
+      "preferred": ["Bus", "MapPin", "Navigation", "AlertTriangle", "User", "Settings", "Phone", "ShieldAlert"]
+    }
+  },
+  "motion": {
+    "transitions": "transition-all duration-300 ease-out",
+    "animations": {
+      "pulse_alert": "animate-pulse",
+      "slide_up": "animate-in slide-in-from-bottom duration-500",
+      "fade_in": "animate-in fade-in duration-300"
+    }
+  },
+  "accessibility": {
+    "contrast": "Ensure text on maps has a backing (halo or card).",
+    "touch_targets": "Minimum 44px for all driver controls.",
+    "color_blindness": "Do not rely on Red/Green alone. Use icons (Check/X) and text labels."
+  },
+  "instructions_to_main_agent": [
+    "1. Install 'lucide-react' for icons.",
+    "2. Use 'react-map-gl' or 'leaflet' for maps (mock if API key missing).",
+    "3. Implement the 'Driver View' with extreme contrast (Dark Mode default).",
+    "4. The 'Student View' must feel like a consumer app (Uber/Google Maps style).",
+    "5. Use the provided image URLs for the landing page and dashboard placeholders.",
+    "6. Create a 'mock_data.js' file to simulate bus movements for the demo.",
+    "7. Ensure the SOS button is the most prominent element on the Driver dashboard."
+  ],
+  "universal_guidelines": [
+    "Avoid generic 'admin panel' looks. Use the 'Control Room' grid strategy.",
+    "Do not use gradients for text.",
+    "Use 'sonner' for all toast notifications.",
+    "All interactive elements must have 'data-testid'."
+  ]
+}
