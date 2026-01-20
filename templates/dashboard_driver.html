@@ -1,0 +1,89 @@
+{% extends "base.html" %}
+
+{% block title %}Driver Dashboard{% endblock %}
+
+{% block content %}
+<div class="grid">
+    <div class="card">
+        <h3><i data-lucide="steering-wheel"></i> Drive Mode</h3>
+        <div class="form-group">
+            <label>Select Bus</label>
+            <select id="bus-select"></select>
+        </div>
+
+        <div id="controls" class="hidden">
+            <button id="start-btn" class="btn btn-primary w-full mb-2">START TRIP</button>
+            <button id="stop-btn" class="btn btn-danger w-full hidden">STOP TRIP</button>
+            <div id="status-indicator" class="hidden text-center text-success font-bold mt-4">
+                ● LIVE TRACKING
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <h3><i data-lucide="alert-triangle"></i> Emergency</h3>
+        <p class="text-muted mb-4">Click below to send immediate SOS to admin.</p>
+        <button class="btn btn-danger w-full py-4" style="font-size: 1.5rem;">SOS</button>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    let activeBusId = null;
+    let watchId = null;
+
+    async function loadBuses() {
+        const res = await fetch('/api/buses');
+        const buses = await res.json();
+        const select = document.getElementById('bus-select');
+        select.innerHTML = '<option value="">-- Select --</option>';
+        buses.forEach(b => {
+            const opt = document.createElement('option');
+            opt.value = b.id;
+            opt.textContent = `${b.number} (${b.route})`;
+            select.appendChild(opt);
+        });
+    }
+
+    document.getElementById('bus-select').onchange = (e) => {
+        if (e.target.value) document.getElementById('controls').classList.remove('hidden');
+    };
+
+    document.getElementById('start-btn').onclick = () => {
+        activeBusId = document.getElementById('bus-select').value;
+        document.getElementById('bus-select').disabled = true;
+        document.getElementById('start-btn').classList.add('hidden');
+        document.getElementById('stop-btn').classList.remove('hidden');
+        document.getElementById('status-indicator').classList.remove('hidden');
+
+        // Start Tracking
+        if (navigator.geolocation) {
+            watchId = navigator.geolocation.watchPosition(pos => {
+                fetch('/api/driver/update', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        bus_id: activeBusId,
+                        status: 'active',
+                        lat: pos.coords.latitude,
+                        lon: pos.coords.longitude
+                    })
+                });
+            });
+        }
+    };
+
+    document.getElementById('stop-btn').onclick = () => {
+        if (watchId) navigator.geolocation.clearWatch(watchId);
+        fetch('/api/driver/update', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ bus_id: activeBusId, status: 'inactive' })
+        });
+        window.location.reload();
+    };
+
+    loadBuses();
+</script>
+{% endblock %}

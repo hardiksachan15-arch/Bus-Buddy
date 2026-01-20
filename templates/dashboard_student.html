@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+
+{% block title %}Student Dashboard{% endblock %}
+
+{% block head %}
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+{% endblock %}
+
+{% block content %}
+<div class="grid">
+    <div class="card col-span-2">
+        <h3><i data-lucide="map"></i> Live Bus Map</h3>
+        <div id="map" style="height: 500px; width: 100%; border-radius: 0.5rem;"></div>
+    </div>
+
+    <div class="card">
+        <h3><i data-lucide="bus"></i> Active Buses</h3>
+        <div id="bus-list">Loading...</div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    const map = L.map('map').setView([28.6139, 77.2090], 12);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap' }).addTo(map);
+
+    let markers = {};
+
+    async function updateBuses() {
+        const res = await fetch('/api/buses');
+        const buses = await res.json();
+        const list = document.getElementById('bus-list');
+        list.innerHTML = '';
+
+        buses.forEach(bus => {
+            // Update List
+            const item = document.createElement('div');
+            item.className = 'list-item';
+            item.innerHTML = `
+                <div>
+                    <strong>Bus ${bus.number}</strong>
+                    <div class="text-xs text-muted">${bus.route}</div>
+                </div>
+                <span class="badge ${bus.status === 'active' ? 'bg-green' : 'bg-gray'}">${bus.status}</span>
+            `;
+            list.appendChild(item);
+
+            // Update Map
+            if (bus.lat && bus.lon && bus.status === 'active') {
+                if (markers[bus.id]) {
+                    markers[bus.id].setLatLng([bus.lat, bus.lon]);
+                } else {
+                    markers[bus.id] = L.marker([bus.lat, bus.lon]).addTo(map)
+                        .bindPopup(`<b>${bus.number}</b>`);
+                }
+            }
+        });
+    }
+
+    setInterval(updateBuses, 3000);
+    updateBuses();
+</script>
+{% endblock %}

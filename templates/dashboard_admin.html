@@ -1,0 +1,222 @@
+{% extends "base.html" %}
+
+{% block title %}Admin Dashboard{% endblock %}
+
+{% block head %}
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+{% endblock %}
+
+{% block content %}
+<div class="grid">
+    <!-- Map Section -->
+    <div class="card col-span-2">
+        <h3><i data-lucide="map"></i> Live Fleet Map</h3>
+        <div id="map" style="height: 400px; width: 100%; border-radius: 0.5rem;"></div>
+    </div>
+
+    <!-- Stats / Fleet -->
+    <div class="card">
+        <h3><i data-lucide="bus"></i> Fleet Management</h3>
+        <p class="text-muted" style="font-size: 0.9rem; margin-bottom: 1rem;">
+            Buses appear <strong>INACTIVE</strong> until a driver logs in and starts a trip.
+        </p>
+        <div class="form-group">
+            <input type="text" id="new-bus-no" placeholder="Bus Number">
+            <input type="text" id="new-bus-route" placeholder="Route Name" style="margin-top:0.5rem;">
+            <input type="number" id="new-bus-cap" placeholder="Capacity" style="margin-top:0.5rem;" value="40">
+            <button onclick="addBus()" class="btn btn-sm btn-primary w-full mt-2">Add Bus</button>
+        </div>
+        <div id="bus-list" style="max-height: 200px; overflow-y: auto; margin-top: 1rem;"></div>
+    </div>
+
+    <!-- Pending Approvals -->
+    <div class="card">
+        <h3><i data-lucide="user-plus"></i> Pending Approvals</h3>
+        <div id="pending-list" style="max-height: 300px; overflow-y: auto;">Loading...</div>
+    </div>
+
+    <!-- User Database (Categories) -->
+    <div class="card col-span-2">
+        <h3><i data-lucide="users"></i> User Database</h3>
+        <div id="user-filter-group" style="display: flex; gap: 1rem; margin-bottom: 1rem;">
+            <button onclick="renderUserList('student')" class="btn btn-sm btn-ghost">Students</button>
+            <button onclick="renderUserList('driver')" class="btn btn-sm btn-ghost">Drivers</button>
+            <button onclick="renderUserList('admin')" class="btn btn-sm btn-ghost">Admins</button>
+            <button onclick="renderUserList('all')" class="btn btn-sm btn-primary">All</button>
+        </div>
+        <div id="user-db-list" style="max-height: 300px; overflow-y: auto;"></div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // --- MAP INIT ---
+    const map = L.map('map').setView([28.6139, 77.2090], 12);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap' }).addTo(map);
+
+    // --- STATE ---
+    let markers = {};
+    let allUsers = [];
+    let currentFilter = 'all'; // Fix: Track active filter
+
+    async function loadData() {
+        try {
+            // 1. Load Buses (For Map & List)
+            const resBuses = await fetch('/api/buses');
+            const buses = await resBuses.json();
+
+            // Update Bus List
+            const busList = document.getElementById('bus-list');
+            busList.innerHTML = '';
+            buses.forEach(b => {
+                // Update Map
+                if (b.lat && b.lon && b.status === 'active') {
+                    if (markers[b.id]) {
+                        markers[b.id].setLatLng([b.lat, b.lon]);
+                    } else {
+                        markers[b.id] = L.marker([b.lat, b.lon]).addTo(map)
+                            .bindPopup(`<b>${b.number}</b><br>${b.route}<br>Driver: ${b.driver || 'Unknown'}`);
+                    }
+                } else if (markers[b.id]) {
+                    map.removeLayer(markers[b.id]);
+                    delete markers[b.id];
+                }
+
+                // Update List UI
+                const div = document.createElement('div');
+                div.className = 'list-item';
+                const driverInfo = b.driver ? `<span class="text-xs text-success">Driven by: ${b.driver}</span>` : '<span class="text-xs text-muted">No Driver</span>';
+                div.innerHTML = `
+                    <div>
+                        <div>${b.number}</div>
+                        ${driverInfo}
+                    </div>
+                    <div class="text-right">
+                         <div class="text-xs text-muted">${b.route}</div>
+                         <span class="badge ${b.status === 'active' ? 'bg-green' : 'bg-gray'}">${b.status}</span>
+                    </div>
+                `;
+                busList.appendChild(div);
+            });
+
+            // 2. Load Pending Users
+            const resUsers = await fetch('/api/users/pending');
+            const users = await resUsers.json();
+            const pendingList = document.getElementById('pending-list');
+            pendingList.innerHTML = users.length ? '' : '<p class="text-muted">No pending approvals.</p>';
+
+            users.forEach(u => {
+                const div = document.createElement('div');
+                div.className = 'list-item';
+                div.innerHTML = `
+                    <div><strong>${u.name}</strong> <span class="text-xs text-muted">(${u.role})</span></div>
+                    <div>
+                        <button onclick="approve(${u.id}, true)" class="btn btn-sm btn-success">✓</button>
+                        <button onclick="approve(${u.id}, false)" class="btn btn-sm btn-danger">✗</button>
+                    </div>
+                `;
+                pendingList.appendChild(div);
+            });
+
+            // 3. Load All Users (for DB)
+            const resAll = await fetch('/api/users/all');
+            allUsers = await resAll.json();
+            renderUserList(currentFilter); // Fix: Use current filter
+        } catch (e) {
+            console.error("Data load error:", e);
+        }
+    }
+
+    function renderUserList(filter) {
+        currentFilter = filter; // Update state
+
+        // Update Buttons Visual State
+        const buttons = document.querySelectorAll('#user-filter-group button');
+        buttons.forEach(btn => {
+            // Check if the button's text content (converted to lowercase) matches the filter
+            // or if the filter is 'all' and the button's text is 'All'
+            if (btn.textContent.toLowerCase() === filter || (filter === 'all' && btn.textContent === 'All')) {
+                btn.className = 'btn btn-sm btn-primary';
+            } else {
+                btn.className = 'btn btn-sm btn-ghost';
+            }
+        });
+
+        const list = document.getElementById('user-db-list');
+        list.innerHTML = '';
+
+        const filtered = filter === 'all' ? allUsers : allUsers.filter(u => u.role === filter);
+
+        if (filtered.length === 0) {
+            list.innerHTML = '<p class="text-muted">No users found in this category.</p>';
+            return;
+        }
+
+        filtered.forEach(u => {
+            const div = document.createElement('div');
+            div.className = 'list-item';
+            div.innerHTML = `
+                <div style="display:flex; gap:1rem; align-items:center;">
+                    <div style="width:32px; height:32px; background:#e5e7eb; border-radius:50%; display:flex; align-items:center; justify-content:center; font-weight:bold;">
+                        ${u.name.charAt(0).toUpperCase()}
+                    </div>
+                    <div>
+                        <div style="font-weight:bold;">${u.name}</div>
+                        <div class="text-xs text-muted">${u.email} • ${u.phone || 'No Phone'}</div>
+                    </div>
+                </div>
+                <div>
+                    <span class="badge" style="background:${u.role === 'admin' ? '#FEF3C7' : '#E5E7EB'}">${u.role.toUpperCase()}</span>
+                </div>
+            `;
+            list.appendChild(div);
+        });
+    }
+
+    // Actions
+    async function approve(id, status) {
+        await fetch('/api/users/approve', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ user_id: id, approved: status })
+        });
+        loadData();
+    }
+
+    async function addBus() {
+        const no = document.getElementById('new-bus-no');
+        const route = document.getElementById('new-bus-route');
+        const cap = document.getElementById('new-bus-cap');
+
+        if (!no.value || !route.value) {
+            alert("Please fill all bus details");
+            return;
+        }
+
+        const res = await fetch('/api/buses', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ number: no.value, route: route.value, capacity: cap.value })
+        });
+
+        const data = await res.json();
+        if (data.success) {
+            // Clear inputs
+            no.value = '';
+            route.value = '';
+            cap.value = '40';
+            loadData();
+        } else {
+            alert("Failed to add bus (Duplicate number?)");
+        }
+    }
+
+    // Auto-Refresh (Every 3 seconds)
+    setInterval(loadData, 3000);
+
+    // Initial Load
+    loadData();
+</script>
+{% endblock %}
