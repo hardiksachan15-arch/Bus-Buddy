@@ -9,8 +9,9 @@ import math
 import os
 
 app = Flask(__name__)
-app.config['SECRET_KEY'] = 'your-secret-key-123'
-app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('SQLALCHEMY_DATABASE_URI', 'sqlite:///busbuddy.db')
+basedir = os.path.abspath(os.path.dirname(__file__))
+app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'default-dev-key-123')
+app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('SQLALCHEMY_DATABASE_URI', 'sqlite:///' + os.path.join(basedir, 'busbuddy.db'))
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 db = SQLAlchemy(app)
@@ -109,17 +110,16 @@ def index():
 def init_db_data():
     with app.app_context():
         # Try to access the DB to check for schema validity
+        # Try to access the DB to check for schema validity
         try:
-            # Inspection query - will fail if columns are missing
+            # Inspection query - will fail if tables don't exist
             db.create_all()
             if Bus.query.first() is not None: pass 
-            if User.query.first() is not None: pass
         except Exception as e:
-            print(f"⚠️ Schema mismatch detected ({e}). Resetting Database...")
-            db.session.rollback()
-            db.drop_all()
-            db.create_all()
-            print("✅ Database reset complete.")
+            print(f"⚠️ Database connection verification failed: {e}")
+            print("To initialize the database fresh, delete the .db file and restart.")
+            # NEVER auto-drop production data!
+
         
         # 1. Restore Admin if missing
         if not User.query.filter_by(email='work.694206969@gmail.com').first():
@@ -421,4 +421,7 @@ def export_csv():
 
 
 if __name__ == '__main__':
-    app.run(debug=True, port=3000)
+    port = int(os.environ.get('PORT', 3000))
+    # debug=True only if FLASK_DEBUG is set, else False
+    debug_mode = os.environ.get('FLASK_DEBUG', 'False').lower() == 'true'
+    app.run(debug=debug_mode, port=port)
