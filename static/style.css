@@ -30,7 +30,8 @@
     --radius-lg: 24px;
 }
 
-/* --- DRIVER COCKPIT THEME --- */
+/* --- DRIVER COCKPIT THEME (DISABLED) --- */
+/*
 .driver-mode {
     --bg-gradient: linear-gradient(135deg, #0F172A 0%, #1E293B 100%);
     --text-main: #F8FAFC;
@@ -61,6 +62,7 @@
     background: #1E293B;
     color: white;
 }
+*/
 
 
 * {
