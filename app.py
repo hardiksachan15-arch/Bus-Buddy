@@ -84,6 +84,7 @@ class Bus(db.Model):
     next_arrival_time = db.Column(db.String(50)) # e.g. "10:30 AM" or "15 min"
     route_coordinates = db.Column(db.Text) # JSON string of coords
     stops = db.Column(db.Text) # JSON string of [{"name": "Stop A", "lat":.., "lon":..}, ...]
+    google_maps_link = db.Column(db.String(500))
 
 class SOSAlert(db.Model):
     id = db.Column(db.Integer, primary_key=True)
