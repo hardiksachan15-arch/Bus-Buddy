@@ -274,15 +274,20 @@ def add_bus():
         # New: Parse coords to extract stops if name is provided in 3rd column
         # Input coords is JSON string of list of lists: [[lat, lon], [lat, lon, "StopName"]]
         
-        raw_coords = json.loads(data.get('coords', '[]'))
+        try:
+            raw_coords = json.loads(data.get('coords', '[]'))
+        except:
+            raw_coords = []
+            
         clean_coords = []
         stops = []
         
-        for p in raw_coords:
-            if len(p) >= 2:
-                clean_coords.append([p[0], p[1]])
-                if len(p) >= 3: # Has name
-                    stops.append({'lat': p[0], 'lon': p[1], 'name': p[2]})
+        if isinstance(raw_coords, list):
+            for p in raw_coords:
+                if isinstance(p, list) and len(p) >= 2:
+                    clean_coords.append([p[0], p[1]])
+                    if len(p) >= 3: # Has name
+                        stops.append({'lat': p[0], 'lon': p[1], 'name': p[2]})
         
         new_bus = Bus(
             bus_number=data['number'], 
