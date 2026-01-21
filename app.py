@@ -83,16 +83,7 @@ class Bus(db.Model):
     # New Fields
     next_arrival_time = db.Column(db.String(50)) # e.g. "10:30 AM" or "15 min"
     route_coordinates = db.Column(db.Text) # JSON string of coords
-    google_maps_link = db.Column(db.String(500))
-
-class SOSAlert(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    bus_id = db.Column(db.Integer, db.ForeignKey('bus.id'))
-    driver_name = db.Column(db.String(100))
-    lat = db.Column(db.Float)
-    lon = db.Column(db.Float)
-    timestamp = db.Column(db.DateTime, default=datetime.utcnow)
-    resolved = db.Column(db.Boolean, default=False)
+    stops = db.Column(db.Text) # JSON string of [{"name": "Stop A", "lat":.., "lon":..}, ...]
 
 # --- ROUTES ---
 
@@ -173,7 +164,6 @@ def forgot_password():
         user = User.query.filter_by(email=email).first()
         
         if user and user.phone == phone:
-            # Identity Verified -> Reset Password
             user.password = generate_password_hash(new_pass)
             db.session.commit()
             flash('Password reset successful! Please login.', 'success')
@@ -190,7 +180,8 @@ def dashboard():
     role = session['role']
     if role == 'student': return render_template('dashboard_student.html')
     if role == 'driver': return render_template('dashboard_driver.html')
-    if role in ['admin', 'transport_dept']: return render_template('dashboard_admin.html')
+    if role == 'transport_dept': return render_template('dashboard_transport.html')
+    if role == 'admin': return render_template('dashboard_admin.html')
     
     return "Unknown Role"
 
@@ -205,6 +196,7 @@ def get_buses():
         'driver': b.driver_name,
         'next_arrival': b.next_arrival_time,
         'coords': b.route_coordinates,
+        'stops': b.stops,
         'gmaps': b.google_maps_link
     } for b in buses])
 
@@ -213,14 +205,27 @@ def add_bus():
     if session.get('role') not in ['admin', 'transport_dept']: return "Unauthorized", 403
     try:
         data = request.json
-        # Format for route_coordinates should be stored as JSON string "[[lat,lon],...]"
+        
+        # New: Parse coords to extract stops if name is provided in 3rd column
+        # Input coords is JSON string of list of lists: [[lat, lon], [lat, lon, "StopName"]]
+        
+        raw_coords = json.loads(data.get('coords', '[]'))
+        clean_coords = []
+        stops = []
+        
+        for p in raw_coords:
+            if len(p) >= 2:
+                clean_coords.append([p[0], p[1]])
+                if len(p) >= 3: # Has name
+                    stops.append({'lat': p[0], 'lon': p[1], 'name': p[2]})
         
         new_bus = Bus(
             bus_number=data['number'], 
             route_name=data['route'], 
             capacity=data.get('capacity', 40),
             next_arrival_time=data.get('next_arrival'),
-            route_coordinates=data.get('coords'),
+            route_coordinates=json.dumps(clean_coords),
+            stops=json.dumps(stops),
             google_maps_link=data.get('gmaps')
         )
         db.session.add(new_bus)

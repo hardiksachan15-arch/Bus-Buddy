@@ -11,19 +11,23 @@
 <div class="grid">
     <div class="card col-span-2">
         <div class="flex justify-between items-center mb-2">
-            <h3><i data-lucide="map"></i> Live Bus Map</h3>
-            <button onclick="updateBuses()" class="btn btn-sm btn-ghost"><i data-lucide="refresh-cw"></i>
-                Refresh</button>
+            <h3 style="color: var(--primary-dark);"><i data-lucide="map"></i> Live Fleet Map</h3>
         </div>
-        <div id="map" style="height: 500px; width: 100%; border-radius: 0.5rem;"></div>
+        <div id="map" style="height: 500px; width: 100%;"></div>
     </div>
 
     <div class="card">
-        <h3><i data-lucide="bus"></i> Find Your Bus</h3>
-        <input type="text" id="search-bar" placeholder="Search by Bus Number or Route..."
-            class="w-full mb-4 p-2 border rounded" onkeyup="filterBuses()">
+        <h3><i data-lucide="search"></i> Find Your Bus</h3>
+        <div style="position: relative;">
+            <i data-lucide="search"
+                style="position: absolute; left: 10px; top: 12px; color: var(--text-muted); width: 16px;"></i>
+            <input type="text" id="search-bar" placeholder="Search Bus No. or Route..." onkeyup="filterBuses()"
+                style="padding-left: 2.5rem; border-radius: 50px;">
+        </div>
 
-        <div id="bus-list" style="max-height: 400px; overflow-y: auto;">Loading...</div>
+        <div id="bus-list" style="max-height: 450px; overflow-y: auto; padding-right: 5px;">
+            <!-- Bus List Items -->
+        </div>
     </div>
 </div>
 {% endblock %}
@@ -31,7 +35,9 @@
 {% block scripts %}
 <script>
     const map = L.map('map').setView([28.6139, 77.2090], 12);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap' }).addTo(map);
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+    }).addTo(map);
 
     let markers = {};
     let polylines = {};
@@ -45,58 +51,92 @@
         } catch (e) { console.error(e); }
     }
 
+    let firstActiveBus = null;
+
     function renderBuses() {
         const query = document.getElementById('search-bar').value.toLowerCase();
         const list = document.getElementById('bus-list');
         list.innerHTML = '';
 
-        // Filter
-        const filtered = allBuses.filter(b =>
-            b.number.toLowerCase().includes(query) ||
-            b.route.toLowerCase().includes(query)
-        );
+        const filtered = allBuses.filter(b => b.number.toLowerCase().includes(query) || b.route.toLowerCase().includes(query));
 
         if (filtered.length === 0) {
-            list.innerHTML = '<p class="text-muted">No buses found.</p>';
+            list.innerHTML = '<div class="text-center p-4 text-muted">No buses found active.</div>';
         }
 
+        // Reset focus tracker
+        let activeBounds = L.latLngBounds([]);
+        let hasActive = false;
+
         filtered.forEach(bus => {
-            // Update List
+            const isActive = bus.status === 'active';
+            if (isActive) hasActive = true;
+
+            // Dynamic Links
+            let gmapsLink = bus.gmaps;
+            if (isActive && bus.lat && bus.lon) {
+                gmapsLink = `https://www.google.com/maps/search/?api=1&query=${bus.lat},${bus.lon}`;
+            }
+
+            // Route Stops Logic
+            let stopsHTML = '';
+            if (bus.stops) {
+                try {
+                    const stops = JSON.parse(bus.stops);
+                    if (stops.length > 0) {
+                        stopsHTML = `<div class="mt-2 text-xs" style="border-left: 2px solid var(--border); padding-left: 10px; margin-left: 5px;">
+                            <div class="text-muted font-bold mb-1">Route Stops</div>
+                            ${stops.map(s => `<div style="margin-bottom:2px">○ ${s.name}</div>`).join('')}
+                        </div>`;
+                    }
+                } catch (e) { }
+            }
+
             const item = document.createElement('div');
             item.className = 'list-item';
-
-            const timingHTML = bus.next_arrival ? `<div class="text-xs text-primary font-bold mt-1">Expected: ${bus.next_arrival}</div>` : '';
-            const gmapsHTML = bus.gmaps ? `<a href="${bus.gmaps}" target="_blank" class="text-xs text-blue-500 hover:underline">Open in Maps</a>` : '';
+            // Highlight if active
+            if (isActive) item.style.borderLeft = "4px solid var(--success)";
 
             item.innerHTML = `
-                <div>
-                    <strong>${bus.number}</strong>
-                    <div class="text-xs text-muted">${bus.route}</div>
-                    ${timingHTML}
-                </div>
-                <div class="text-right flex flex-col items-end">
-                    <span class="badge ${bus.status === 'active' ? 'bg-green' : 'bg-gray'}">${bus.status}</span>
-                    ${gmapsHTML}
+                <div style="width: 100%;">
+                    <div class="flex justify-between items-center mb-1">
+                        <strong style="font-size: 1.1rem; color: var(--primary-dark);">${bus.number}</strong>
+                        <span class="badge ${isActive ? 'bg-green' : 'bg-gray'}">${bus.status}</span>
+                    </div>
+                    <div class="text-xs text-muted mb-2"><i data-lucide="map-pin" width="12" style="display:inline;"></i> ${bus.route}</div>
+                    
+                    ${isActive ? `
+                    <div style="background: rgba(79, 70, 229, 0.05); padding: 8px; border-radius: 8px; margin-bottom: 8px;">
+                         <div class="flex justify-between text-xs font-bold" style="color: var(--primary);">
+                            <span><i data-lucide="clock" width="12"></i> ETA: ${bus.next_arrival || 'Calculating...'}</span>
+                        </div>
+                        <div class="text-xs text-muted mt-1">Driver: ${bus.driver || 'Assigned'}</div>
+                    </div>` : ''}
+                    
+                    ${stopsHTML}
+
+                    <div class="flex gap-2 mt-2">
+                        ${gmapsLink ? `<a href="${gmapsLink}" target="_blank" class="btn btn-sm btn-primary w-full" style="justify-content: center;"><i data-lucide="navigation" width="12"></i> Track Live</a>` : ''}
+                    </div>
                 </div>
             `;
             list.appendChild(item);
 
-            // Update Map Markers & Routes
-            // Only show active buses OR buses matching search on map?
-            // User requirement: "hyperlink to bus in maps and ain map please make sure to mark the route"
-            // Showing all active is standard.
+            // Update Map
+            if (bus.lat && bus.lon && isActive) {
+                activeBounds.extend([bus.lat, bus.lon]); // Add to bounds
 
-            if (bus.lat && bus.lon && bus.status === 'active') {
                 if (markers[bus.id]) {
                     markers[bus.id].setLatLng([bus.lat, bus.lon]);
                 } else {
-                    markers[bus.id] = L.marker([bus.lat, bus.lon]).addTo(map)
-                        .bindPopup(`
-                            <b>${bus.number}</b><br>
-                            ${bus.route}<br>
-                            Next: ${bus.next_arrival || '--'}<br>
-                            ${bus.gmaps ? `<a href="${bus.gmaps}" target="_blank">Google Maps</a>` : ''}
-                        `);
+                    const icon = L.divIcon({
+                        className: 'bus-marker',
+                        html: `<div style="background:var(--primary); color:white; width:35px; height:35px; border-radius:50%; display:flex; align-items:center; justify-content:center; box-shadow: 0 4px 15px rgba(0,0,0,0.4); font-weight:bold; font-size:16px; border:2px solid white;">🚌</div>`,
+                        iconSize: [35, 35]
+                    });
+
+                    markers[bus.id] = L.marker([bus.lat, bus.lon], { icon: icon }).addTo(map)
+                        .bindPopup(`<b>${bus.number}</b><br>Driver: ${bus.driver}<br>ETA: ${bus.next_arrival}`);
                 }
             } else if (markers[bus.id]) {
                 map.removeLayer(markers[bus.id]);
@@ -108,17 +148,23 @@
                 try {
                     const latlngs = JSON.parse(bus.coords);
                     if (!polylines[bus.id]) {
-                        polylines[bus.id] = L.polyline(latlngs, { color: 'blue', opacity: 0.6 }).addTo(map);
+                        polylines[bus.id] = L.polyline(latlngs, { color: '#6366f1', weight: 5, opacity: 0.6 }).addTo(map);
+                        // Also add route to bounds if this bus is active
+                        if (isActive) latlngs.forEach(pt => activeBounds.extend(pt));
                     }
                 } catch (e) { }
             }
         });
+
+        // Auto-Zoom Logic: If we have active buses/routes, fit the map to show them
+        if (hasActive && activeBounds.isValid()) {
+            map.fitBounds(activeBounds, { padding: [50, 50], maxZoom: 15, animate: true });
+        }
+
+        lucide.createIcons();
     }
 
-    function filterBuses() {
-        renderBuses();
-    }
-
+    function filterBuses() { renderBuses(); }
     setInterval(updateBuses, 5000);
     updateBuses();
 </script>

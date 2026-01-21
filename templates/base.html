@@ -5,7 +5,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Bus Buddy - {% block title %}{% endblock %}</title>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
     <script src="https://unpkg.com/lucide@latest"></script>
     {% block head %}{% endblock %}
@@ -14,23 +14,34 @@
 <body>
     <nav class="navbar">
         <div class="logo">
-            <i data-lucide="bus"></i>
-            <span>Bus Buddy</span>
+            <div style="background: var(--primary); padding: 5px; border-radius: 8px; display:flex;">
+                <i data-lucide="bus" color="white"></i>
+            </div>
+            <span>BusBuddy</span>
         </div>
         <div class="nav-links">
             {% if session.get('user_id') %}
-            <span>Hello, {{ session.get('name') }}</span>
-            <a href="{{ url_for('logout') }}" class="btn btn-sm btn-ghost">Logout</a>
+            <span style="font-weight: 600; color: var(--primary-dark);">Hi, {{ session.get('name').split(' ')[0]
+                }}</span>
+            <a href="{{ url_for('logout') }}" class="btn btn-sm btn-ghost" style="color: var(--danger);">
+                <i data-lucide="log-out" width="16"></i> Logout
+            </a>
             {% endif %}
         </div>
     </nav>
 
-    <div class="container">
+    <div class="container animate-up">
         {% with messages = get_flashed_messages(with_categories=true) %}
         {% if messages %}
         <div class="flash-messages">
             {% for category, message in messages %}
-            <div class="alert alert-{{ category }}">{{ message }}</div>
+            <div class="alert alert-{{ category }}">
+                {% if category == 'success' %}<i data-lucide="check-circle" width="18" style="margin-right:8px"></i>{%
+                endif %}
+                {% if category == 'danger' %}<i data-lucide="alert-circle" width="18" style="margin-right:8px"></i>{%
+                endif %}
+                {{ message }}
+            </div>
             {% endfor %}
         </div>
         {% endif %}

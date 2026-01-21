@@ -3,31 +3,40 @@
 {% block title %}Login{% endblock %}
 
 {% block content %}
-<div class="auth-wrapper">
-    <div class="auth-card">
-        <h2>Welcome Back</h2>
-        <p class="text-muted">Login to Bus Buddy</p>
-
-        <form method="POST">
-            <div class="form-group">
-                <label>Email</label>
-                <input type="email" name="email" required placeholder="name@college.edu">
+<div class="auth-container">
+    <div class="card auth-card">
+        <div class="mb-2 text-center">
+            <div
+                style="width: 50px; height: 50px; background: linear-gradient(135deg, var(--primary), var(--secondary)); border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 1rem auto; box-shadow: 0 4px 10px rgba(0,0,0,0.1);">
+                <i data-lucide="lock" color="white"></i>
             </div>
-            <div class="form-group">
-                <label>Password</label>
-                <input type="password" name="password" required placeholder="••••••••">
-            </div>
+        </div>
+        <h2 class="auth-title">Welcome Back</h2>
 
-            <div style="text-align: right; margin-bottom: 1rem;">
-                <a href="{{ url_for('forgot_password') }}"
-                    style="color: var(--primary); text-decoration: none; font-size: 0.9rem;">Forgot Password?</a>
+        <form method="POST" action="/login">
+            <div style="position: relative;">
+                <i data-lucide="mail"
+                    style="position: absolute; left: 10px; top: 12px; color: var(--text-muted); width: 18px;"></i>
+                <input type="email" name="email" placeholder="Email Address" required style="padding-left: 2.5rem;">
             </div>
 
-            <button type="submit" class="btn btn-primary w-full">Sign In</button>
+            <div style="position: relative;">
+                <i data-lucide="key"
+                    style="position: absolute; left: 10px; top: 12px; color: var(--text-muted); width: 18px;"></i>
+                <input type="password" name="password" placeholder="Password" required style="padding-left: 2.5rem;">
+            </div>
+
+            <button type="submit" class="btn btn-primary w-full" style="margin-top: 1rem;">
+                Login <i data-lucide="arrow-right" width="16"></i>
+            </button>
         </form>
 
-        <div class="auth-footer">
-            Don't have an account? <a href="{{ url_for('register') }}">Sign Up</a>
+        <div style="margin-top: 1.5rem; font-size: 0.9rem; color: var(--text-muted);">
+            Don't have an account? <a href="{{ url_for('register') }}"
+                style="color: var(--primary); font-weight: 600; text-decoration: none;">Register</a>
+            <br>
+            <a href="{{ url_for('forgot_password') }}" style="color: var(--text-muted); font-size: 0.8rem;">Forgot
+                Password?</a>
         </div>
     </div>
 </div>

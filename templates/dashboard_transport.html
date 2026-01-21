@@ -1,0 +1,138 @@
+{% extends "base.html" %}
+
+{% block title %}Transport Dept{% endblock %}
+
+{% block head %}
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+{% endblock %}
+
+{% block content %}
+<div class="card mb-2" style="background: linear-gradient(135deg, var(--primary-dark), #1e1b4b); color: white;">
+    <div class="flex justify-between items-center">
+        <div>
+            <h2 style="margin-bottom: 5px;">Transport Control Center</h2>
+            <div class="text-xs" style="opacity: 0.8;">Overview of all active routes and drivers</div>
+        </div>
+        <div style="font-size: 2rem; font-weight: 800;">
+            <i data-lucide="radio" style="animation: pulse 2s infinite;"></i>
+        </div>
+    </div>
+</div>
+
+<div class="grid">
+    <!-- Main Map -->
+    <div class="card col-span-2">
+        <h3 class="mb-2"><i data-lucide="map"></i> Live Fleet Tracking</h3>
+        <div id="map" style="height: 500px; width: 100%;"></div>
+    </div>
+
+    <!-- Active Drivers Panel -->
+    <div class="card">
+        <h3><i data-lucide="steering-wheel"></i> Active Drivers</h3>
+        <div id="driver-list" style="max-height: 400px; overflow-y: auto;">
+            Loading active drivers...
+        </div>
+    </div>
+
+    <!-- Quick Actions / Reports -->
+    <div class="card">
+        <h3><i data-lucide="file-text"></i> Reports</h3>
+        <button class="btn btn-primary w-full mb-2" onclick="window.location.href='/api/export/csv'">
+            <i data-lucide="download"></i> Export User Data CSV
+        </button>
+        <button class="btn btn-ghost w-full" disabled>
+            <i data-lucide="bar-chart-2"></i> Route Analytics (Coming Soon)
+        </button>
+
+        <h3 class="mt-4"><i data-lucide="alert-octagon"></i> Recent SOS</h3>
+        <div id="sos-list-transport" style="font-size: 0.85rem;"></div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    const map = L.map('map').setView([28.6139, 77.2090], 12);
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+        attribution: '&copy; OpenStreetMap &copy; CARTO'
+    }).addTo(map);
+
+    let markers = {};
+    let polylines = {};
+
+    async function refreshData() {
+        try {
+            // Buses
+            const res = await fetch('/api/buses');
+            const buses = await res.json();
+            const activeBuses = buses.filter(b => b.status === 'active');
+
+            // Map Logic
+            buses.forEach(b => {
+                if (b.lat && b.lon && b.status === 'active') {
+                    if (markers[b.id]) markers[b.id].setLatLng([b.lat, b.lon]);
+                    else {
+                        const icon = L.divIcon({
+                            className: 'transport-marker',
+                            html: `<div style="background:#10B981; border:2px solid white; width:15px; height:15px; border-radius:50%; box-shadow:0 0 10px #10B981;"></div>`
+                        });
+                        markers[b.id] = L.marker([b.lat, b.lon], { icon }).addTo(map).bindPopup(`<b>${b.number}</b>`);
+                    }
+                } else if (markers[b.id]) { map.removeLayer(markers[b.id]); delete markers[b.id]; }
+
+                if (b.coords && !polylines[b.id]) {
+                    try {
+                        const latlngs = JSON.parse(b.coords);
+                        polylines[b.id] = L.polyline(latlngs, { color: '#3b82f6', weight: 2, opacity: 0.5 }).addTo(map);
+                    } catch (e) { }
+                }
+            });
+
+            // Driver List
+            const list = document.getElementById('driver-list');
+            list.innerHTML = activeBuses.length ? '' : '<p class="text-muted text-center p-4">No active drivers</p>';
+            activeBuses.forEach(b => {
+                const item = document.createElement('div');
+                item.className = 'list-item';
+                item.innerHTML = `
+                    <div>
+                        <strong>${b.driver}</strong>
+                        <div class="text-xs text-muted">Driving ${b.number} (${b.route})</div>
+                    </div>
+                    <span class="badge bg-green">Active</span>
+                `;
+                list.appendChild(item);
+            });
+
+            // SOS
+            const resSos = await fetch('/api/sos/history');
+            const alerts = await resSos.json();
+            const sosList = document.getElementById('sos-list-transport');
+            sosList.innerHTML = alerts.slice(0, 3).map(a =>
+                `<div class="text-danger text-xs mb-2"><strong>${a.driver}</strong> @ ${a.time.split(' ')[1]}</div>`
+            ).join('') || '<div class="text-muted text-xs">All Clear</div>';
+
+        } catch (e) { }
+    }
+
+    setInterval(refreshData, 5000);
+    refreshData();
+</script>
+<style>
+    /* Pulse Animation for Header Icon */
+    @keyframes pulse {
+        0% {
+            opacity: 1;
+        }
+
+        50% {
+            opacity: 0.5;
+        }
+
+        100% {
+            opacity: 1;
+        }
+    }
+</style>
+{% endblock %}
