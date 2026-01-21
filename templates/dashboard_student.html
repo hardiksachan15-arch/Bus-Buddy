@@ -14,6 +14,9 @@
             <h3 class="flex items-center gap-2">
                 <i data-lucide="map" class="text-primary"></i> Live Fleet Map
             </h3>
+            <button class="btn btn-sm btn-ghost" onclick="map.invalidateSize(); alert('Map Refreshed')">
+                <i data-lucide="refresh-cw" width="14"></i> Refresh
+            </button>
         </div>
         <div id="map" style="height: 500px; width: 100%; border-radius: var(--radius-sm);"></div>
     </div>
@@ -30,6 +33,20 @@
         <div id="bus-list" style="max-height: 450px; overflow-y: auto; padding-right: 5px;">
             <!-- Bus List Items -->
         </div>
+    </div>
+</div>
+</div>
+
+<!-- Schedule Modal -->
+<div id="schedule-modal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+    onclick="closeModal(event)">
+    <div class="card" style="width: 400px; max-width: 90%; max-height: 80vh; overflow-y: auto;">
+        <div class="flex justify-between items-center mb-4">
+            <h3><i data-lucide="calendar"></i> Bus Timetable</h3>
+            <button onclick="document.getElementById('schedule-modal').classList.add('hidden')"
+                class="btn btn-sm btn-ghost">✕</button>
+        </div>
+        <div id="schedule-content">Loading...</div>
     </div>
 </div>
 {% endblock %}
@@ -51,6 +68,34 @@
             allBuses = await res.json();
             renderBuses();
         } catch (e) { console.error(e); }
+    }
+
+    // Close Modal Logic
+    function closeModal(e) {
+        if (e.target.id === 'schedule-modal') e.target.classList.add('hidden');
+    }
+
+    async function viewSchedule(busId, busNo) {
+        const modal = document.getElementById('schedule-modal');
+        const content = document.getElementById('schedule-content');
+        modal.classList.remove('hidden');
+        content.innerHTML = '<p class="text-center text-muted">Fetching Timetable...</p>';
+
+        try {
+            const res = await fetch(`/api/schedules/${busId}`);
+            const stops = await res.json();
+
+            if (stops.length === 0) {
+                content.innerHTML = '<p class="text-center text-muted">No schedule uploaded for this bus yet.</p>';
+            } else {
+                content.innerHTML = stops.map(s => `
+                    <div class="flex justify-between items-center border-b p-2">
+                        <span>${s.stop}</span>
+                        <strong class="text-primary">${s.time}</strong>
+                    </div>
+                `).join('');
+            }
+        } catch (e) { content.innerHTML = '<p class="text-danger">Error loading schedule.</p>'; }
     }
 
     let firstActiveBus = null;
@@ -97,7 +142,16 @@
             const item = document.createElement('div');
             item.className = 'list-item';
             // Highlight if active
-            if (isActive) item.style.borderLeft = "4px solid var(--success)";
+            if (isActive) {
+                item.style.borderLeft = "4px solid var(--success)";
+                item.style.cursor = 'pointer';
+                item.onclick = (e) => {
+                    // Prevent trigger when clicking buttons
+                    if (e.target.tagName !== 'BUTTON' && e.target.tagName !== 'I' && e.target.tagName !== 'A') {
+                        focusBus(bus.lat, bus.lon);
+                    }
+                };
+            }
 
             item.innerHTML = `
                 <div style="width: 100%;">
@@ -105,6 +159,7 @@
                         <strong style="font-size: 1.1rem; color: var(--primary-dark);">${bus.number}</strong>
                         <span class="badge ${isActive ? 'bg-green' : 'bg-gray'}">${bus.status}</span>
                     </div>
+                    ${isActive ? `<div class="text-xs text-primary mb-1" style="font-style:italic;">Click card to locate</div>` : ''}
                     <div class="text-xs text-muted mb-2"><i data-lucide="map-pin" width="12" style="display:inline;"></i> ${bus.route}</div>
                     
                     ${isActive ? `
@@ -118,7 +173,10 @@
                     ${stopsHTML}
 
                     <div class="flex gap-2 mt-2">
-                        ${gmapsLink ? `<a href="${gmapsLink}" target="_blank" class="btn btn-sm btn-primary w-full" style="justify-content: center;"><i data-lucide="navigation" width="12"></i> Track Live</a>` : ''}
+                        ${gmapsLink ? `<a href="${gmapsLink}" target="_blank" class="btn btn-sm btn-primary flex-1" style="justify-content: center;"><i data-lucide="navigation" width="12"></i> Track</a>` : ``}
+                        <button onclick="viewSchedule(${bus.id}, '${bus.number}')" class="btn btn-sm btn-ghost flex-1 border">
+                            <i data-lucide="calendar" width="12"></i> Schedule
+                        </button>
                     </div>
                 </div>
             `;
@@ -138,7 +196,8 @@
                     });
 
                     markers[bus.id] = L.marker([bus.lat, bus.lon], { icon: icon }).addTo(map)
-                        .bindPopup(`<b>${bus.number}</b><br>Driver: ${bus.driver}<br>ETA: ${bus.next_arrival}`);
+                        .bindPopup(`<b>${bus.number}</b><br>Driver: ${bus.driver}<br>ETA: ${bus.next_arrival}`)
+                        .on('click', () => focusBus(bus.lat, bus.lon));
                 }
             } else if (markers[bus.id]) {
                 map.removeLayer(markers[bus.id]);
@@ -164,6 +223,10 @@
         }
 
         lucide.createIcons();
+    }
+
+    function focusBus(lat, lon) {
+        map.flyTo([lat, lon], 16, { animate: true, duration: 1.5 });
     }
 
     function filterBuses() { renderBuses(); }

@@ -21,22 +21,67 @@
             </div>
         </div>
         <div class="badge bg-green px-4 py-2 text-sm">
-            <i data-lucide="activity" width="12" class="inline mr-1"></i> Live Monitoring
+            <button class="btn btn-sm btn-ghost text-white" onclick="refreshData(); alert('Data Refreshed')">
+                <i data-lucide="refresh-cw" width="12"></i> Refresh
+            </button>
         </div>
     </div>
 
-    <!-- Main Map -->
-    <div class="card col-span-2">
-        <h3 class="mb-2 flex items-center gap-2">
-            <i data-lucide="map" class="text-primary"></i> Live Fleet Tracking
-        </h3>
-        <div id="map" style="height: 500px; width: 100%; border-radius: var(--radius-sm);"></div>
+    <!-- Fleet Management Row (New) -->
+    <div class="card col-span-3 grid grid-cols-2 gap-4 mb-4"
+        style="background: linear-gradient(135deg, rgba(79, 70, 229, 0.05) 0%, rgba(255, 255, 255, 0) 100%); border: 1px solid var(--primary-light);">
+        <!-- Add Single Bus -->
+        <div>
+            <h3 class="flex items-center gap-2"><i data-lucide="plus-circle" class="text-primary"></i> Add New Bus</h3>
+            <div class="grid grid-cols-2 gap-2 mb-2">
+                <input type="text" id="new-bus-no" placeholder="Bus Number (e.g. DL-1C-001)" class="p-2 border rounded">
+                <input type="text" id="new-bus-route" placeholder="Route (e.g. Red Line)" class="p-2 border rounded">
+            </div>
+            <input type="text" id="new-bus-driver" placeholder="Driver Name (Optional)"
+                class="w-full p-2 border rounded mb-2">
+            <button onclick="addBus()" class="btn btn-primary w-full">Add Bus</button>
+        </div>
+
+        <!-- Bulk Upload -->
+        <div>
+            <h3 class="flex items-center gap-2"><i data-lucide="upload-cloud" class="text-secondary"></i> Bulk Upload
+                (CSV)</h3>
+            <div class="mb-2 text-xs text-muted">Attributes: Bus Number, Route Name, Driver Name (Optional)</div>
+            <div class="flex gap-2">
+                <input type="file" id="bulk-csv" accept=".csv" class="p-2 border rounded flex-1">
+                <button onclick="uploadBulk()" class="btn btn-secondary">Upload Fleet</button>
+            </div>
+            <a href="/static/sample_buses.csv" class="text-xs text-primary underline mt-1 block" download>Download
+                Sample CSV</a>
+        </div>
     </div>
 
-    <!-- Right Panel -->
-    <div class="flex flex-col gap-4">
-        <!-- Active Drivers Panel -->
-        <div class="card">
+    <!-- Analytics & Map Row -->
+    <div class="card col-span-3 grid grid-cols-3 gap-4">
+        <!-- Analytics Chart -->
+        <div class="col-span-1">
+            <h3 class="mb-2"><i data-lucide="pie-chart"></i> Fleet Analytics</h3>
+            <canvas id="fleetChart" width="200" height="200"></canvas>
+            <div id="analytics-stats" class="mt-4 grid grid-cols-2 gap-2 text-center text-xs">
+                <!-- Populated via JS -->
+            </div>
+        </div>
+
+        <!-- Main Map -->
+        <div class="col-span-2">
+            <h3 class="mb-2 flex items-center gap-2">
+                <i data-lucide="map" class="text-primary"></i> Live Fleet Tracking
+                <button class="btn btn-sm btn-ghost ml-auto" onclick="map.invalidateSize()">Refresh Map</button>
+            </h3>
+            <div id="map" style="height: 350px; width: 100%; border-radius: var(--radius-sm);"></div>
+        </div>
+    </div>
+
+    <!-- Right Panel & Hierarchy -->
+    <div class="card col-span-3 grid grid-cols-2 gap-4">
+
+        <!-- Active Drivers List -->
+        <div>
             <h3 class="flex items-center gap-2">
                 <i data-lucide="steering-wheel" class="text-primary"></i> Active Drivers
             </h3>
@@ -45,42 +90,69 @@
             </div>
         </div>
 
-        <!-- Quick Actions / Reports -->
-        <div class="card">
-            <h3><i data-lucide="file-text" class="text-primary"></i> Reports</h3>
-            <button class="btn btn-primary w-full mb-2" onclick="window.location.href='/api/export/csv'">
-                <i data-lucide="download"></i> Export User Data CSV
-            </button>
-            <button class="btn btn-ghost w-full" disabled>
-                <i data-lucide="bar-chart-2"></i> Route Analytics (Coming Soon)
-            </button>
+        <!-- Hierarchy Management -->
+        <div>
+            <h3><i data-lucide="users" class="text-primary"></i> User Hierarchy</h3>
+            <input type="text" id="user-search" placeholder="Search Students/Drivers..."
+                class="w-full mb-2 p-2 border rounded" onkeyup="filterUsers()">
+            <div id="hierarchy-list" style="max-height: 250px; overflow-y: auto;">
+                <!-- Populated via JS -->
+            </div>
 
-            <h3 class="mt-4 text-danger"><i data-lucide="alert-octagon"></i> Recent SOS</h3>
-            <div id="sos-list-transport" style="font-size: 0.85rem; max-height: 150px; overflow-y: auto;"></div>
+            <h3 class="mt-4 text-danger"><i data-lucide="alert-octagon"></i> SOS History</h3>
+            <div id="sos-list-transport" style="font-size: 0.85rem; max-height: 100px; overflow-y: auto;"></div>
         </div>
     </div>
 </div>
 {% endblock %}
 
 {% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
     const map = L.map('map').setView([28.6139, 77.2090], 12);
-    // Standard Light Mode Tiles
     L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
         attribution: '&copy; OpenStreetMap &copy; CARTO'
     }).addTo(map);
 
     let markers = {};
     let polylines = {};
+    let allUsers = [];
+
+    // Chart Init
+    const ctx = document.getElementById('fleetChart').getContext('2d');
+    const fleetChart = new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+            labels: ['Active', 'Inactive'],
+            datasets: [{
+                data: [0, 0],
+                backgroundColor: ['#10B981', '#E5E7EB']
+            }]
+        },
+        options: { plugins: { legend: { position: 'bottom' } } }
+    });
 
     async function refreshData() {
         try {
-            // Buses
+            // 1. Analytics & Buses
+            const resStats = await fetch('/api/analytics');
+            const stats = await resStats.json();
+
+            // Update Chart
+            fleetChart.data.datasets[0].data = [stats.buses.active, stats.buses.inactive];
+            fleetChart.update();
+
+            // Update Stats Display
+            document.getElementById('analytics-stats').innerHTML = `
+                <div class="bg-gray p-2 rounded"><strong>${stats.users.total}</strong><br>Users</div>
+                <div class="bg-gray p-2 rounded"><strong>${stats.sos}</strong><br>SOS Alerts</div>
+            `;
+
+            // 2. Map Logic & Drivers
             const res = await fetch('/api/buses');
             const buses = await res.json();
             const activeBuses = buses.filter(b => b.status === 'active');
 
-            // Map Logic
             buses.forEach(b => {
                 if (b.lat && b.lon && b.status === 'active') {
                     if (markers[b.id]) markers[b.id].setLatLng([b.lat, b.lon]);
@@ -89,14 +161,16 @@
                             className: 'transport-marker',
                             html: `<div style="background:#10B981; border:2px solid white; width:15px; height:15px; border-radius:50%; box-shadow:0 0 10px #10B981;"></div>`
                         });
-                        markers[b.id] = L.marker([b.lat, b.lon], { icon }).addTo(map).bindPopup(`<b>${b.number}</b>`);
+                        markers[b.id] = L.marker([b.lat, b.lon], { icon }).addTo(map)
+                            .bindPopup(`<b>${b.number}</b>`)
+                            .on('click', () => focusBus(b.lat, b.lon));
                     }
                 } else if (markers[b.id]) { map.removeLayer(markers[b.id]); delete markers[b.id]; }
 
                 if (b.coords && !polylines[b.id]) {
                     try {
                         const latlngs = JSON.parse(b.coords);
-                        polylines[b.id] = L.polyline(latlngs, { color: '#3b82f6', weight: 2, opacity: 0.5 }).addTo(map);
+                        polylines[b.id] = L.polyline(latlngs, { color: '#3b82f6', weight: 2 }).addTo(map);
                     } catch (e) { }
                 }
             });
@@ -107,6 +181,10 @@
             activeBuses.forEach(b => {
                 const item = document.createElement('div');
                 item.className = 'list-item';
+                // Click to zoom
+                item.style.cursor = 'pointer';
+                item.onclick = () => focusBus(b.lat, b.lon);
+
                 item.innerHTML = `
                     <div>
                         <strong>${b.driver}</strong>
@@ -117,20 +195,95 @@
                 list.appendChild(item);
             });
 
-            // SOS
+            // 3. Hierarchy - Load Once or Refresh
+            if (allUsers.length === 0) {
+                const resUsers = await fetch('/api/users/general');
+                allUsers = await resUsers.json();
+                filterUsers();
+            }
+
+            // 4. SOS
             const resSos = await fetch('/api/sos/history');
             const alerts = await resSos.json();
-            const sosList = document.getElementById('sos-list-transport');
-            sosList.innerHTML = alerts.slice(0, 3).map(a =>
-                `<div class="text-danger text-xs mb-2"><strong>${a.driver}</strong> @ ${a.time.split(' ')[1]}</div>`
-            ).join('') || '<div class="text-muted text-xs">All Clear</div>';
+            document.getElementById('sos-list-transport').innerHTML = alerts.slice(0, 3).map(a =>
+                `<div class="text-xs text-danger mb-1"><strong>${a.driver}</strong> (${a.time})</div>`
+            ).join('');
 
             lucide.createIcons();
-        } catch (e) { }
+        } catch (e) { console.error(e); }
+    }
+
+    function filterUsers() {
+        const q = document.getElementById('user-search').value.toLowerCase();
+        const list = document.getElementById('hierarchy-list');
+        list.innerHTML = '';
+
+        allUsers.filter(u => u.name.toLowerCase().includes(q) || u.role.includes(q)).forEach(u => {
+            const div = document.createElement('div');
+            div.className = 'list-item';
+            div.innerHTML = `
+                <div><strong>${u.name}</strong> <span class="text-xs text-muted">(${u.role})</span></div>
+                <div class="text-xs ${u.approved ? 'text-success' : 'text-danger'}">${u.approved ? 'Verified' : 'Pending'}</div>
+            `;
+            list.appendChild(div);
+        });
+    }
+
+    function focusBus(lat, lon) {
+        map.flyTo([lat, lon], 16, { animate: true, duration: 1.5 });
+    }
+
+    // --- FLEET MANAGEMENT JS ---
+    async function addBus() {
+        const no = document.getElementById('new-bus-no').value;
+        const route = document.getElementById('new-bus-route').value;
+        const driver = document.getElementById('new-bus-driver').value;
+
+        if (!no || !route) return alert("Validation Error: Bus Number & Route are required.");
+
+        try {
+            const res = await fetch('/api/buses', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ number: no, route: route, driver_name: driver })
+            });
+            const data = await res.json();
+
+            if (res.ok) {
+                alert("Bus Added Successfully!");
+                document.getElementById('new-bus-no').value = '';
+                document.getElementById('new-bus-route').value = '';
+                document.getElementById('new-bus-driver').value = '';
+                refreshData();
+            } else {
+                alert("Error: " + (data.error || "Unknown error"));
+            }
+        } catch (e) { alert("Network Error"); }
+    }
+
+    async function uploadBulk() {
+        const fileInput = document.getElementById('bulk-csv');
+        if (!fileInput.files.length) return alert("Select a CSV file first.");
+
+        const formData = new FormData();
+        formData.append('file', fileInput.files[0]);
+
+        try {
+            const res = await fetch('/api/buses/bulk', { method: 'POST', body: formData });
+            const data = await res.json();
+
+            if (res.ok) {
+                alert(`Bulk Upload Complete! Added ${data.count} buses.`);
+                refreshData();
+            } else {
+                alert("Upload Failed: " + (data.error || "Check file format"));
+            }
+        } catch (e) { alert("Upload Error"); }
     }
 
     setInterval(refreshData, 5000);
     refreshData();
+
 </script>
 <style>
     /* Pulse Animation for Header Icon */

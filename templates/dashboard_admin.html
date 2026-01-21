@@ -44,39 +44,111 @@
     <div class="card col-span-2">
         <div class="flex justify-between items-center mb-2">
             <h3><i data-lucide="map"></i> Live Fleet Overview</h3>
-            <span class="badge bg-green">Live Updates On</span>
+            <div class="flex gap-2">
+                <button class="btn btn-sm btn-ghost" onclick="map.invalidateSize(); alert('Map Refreshed');">
+                    <i data-lucide="refresh-cw" width="14"></i> Refresh
+                </button>
+                <span class="badge bg-green">Live Updates On</span>
+            </div>
         </div>
         <div id="map" style="height: 450px; width: 100%;"></div>
     </div>
 
-    <!-- Bus Management -->
+    <!-- Bus & Bulk Management -->
     <div class="card">
         <h3><i data-lucide="plus-circle"></i> Add New Bus</h3>
-        <div class="form-group bg-gray p-4 rounded-lg">
+
+        <!-- Standard Add -->
+        <div class="form-group bg-gray p-4 rounded-lg mb-4">
+            <h5 class="text-xs font-bold text-muted uppercase mb-2">Single Entry</h5>
             <input type="text" id="new-bus-no" placeholder="Bus Number (e.g. DL-1C-0001)">
             <input type="text" id="new-bus-route" placeholder="Route Name">
+            <input type="text" id="new-bus-driver" placeholder="Driver Name (Optional)">
+            <button onclick="addBus()" class="btn btn-primary w-full mt-2">Add Bus</button>
+        </div>
 
-            <label class="text-xs font-bold text-muted mb-1 block">Route File (lat,lon,stop_name)</label>
-            <div style="position: relative;">
-                <input type="file" id="route-file" accept=".txt" style="padding: 0.5rem; background: white;">
-            </div>
-
-            <button onclick="addBus()" class="btn btn-primary w-full mt-4">Add to Fleet</button>
+        <!-- Bulk Upload -->
+        <div class="form-group bg-gray p-4 rounded-lg">
+            <h5 class="text-xs font-bold text-muted uppercase mb-2">Bulk Upload (CSV)</h5>
+            <div class="text-xs text-muted mb-2">fmt: Number, Route, Driver</div>
+            <input type="file" id="bulk-csv" accept=".csv" style="padding: 0.5rem; background: white; width: 100%;">
+            <button onclick="uploadBulk()" class="btn btn-secondary w-full mt-2">
+                <i data-lucide="upload"></i> Upload Fleet
+            </button>
         </div>
 
         <h4 class="mt-4 mb-2 text-muted uppercase text-xs font-bold">Current Fleet</h4>
         <div id="bus-list" style="max-height: 250px; overflow-y: auto;"></div>
     </div>
 
-    <!-- SOS & Approvals -->
+    <!-- SOS & Transport Management -->
     <div class="card">
         <h3 class="text-danger"><i data-lucide="alert-octagon"></i> SOS Alerts</h3>
-        <div id="sos-list" style="max-height: 200px; overflow-y: auto;"></div>
+        <div id="sos-list" style="max-height: 150px; overflow-y: auto; margin-bottom: 2rem;"></div>
+
+        <h3><i data-lucide="shield"></i> Transport Dept</h3>
+        <button onclick="document.getElementById('transport-modal').classList.remove('hidden')"
+            class="btn btn-primary w-full mb-2">
+            <i data-lucide="user-plus"></i> Add Officer
+        </button>
+        <div id="transport-list" style="max-height: 150px; overflow-y: auto;"></div>
     </div>
 
+    <!-- Approvals & Schedules -->
     <div class="card">
-        <h3><i data-lucide="users"></i> Pending Approvals</h3>
-        <div id="pending-list" style="max-height: 200px; overflow-y: auto;"></div>
+        <h3><i data-lucide="users"></i> Confirm Users</h3>
+        <div id="pending-list" style="max-height: 150px; overflow-y: auto; margin-bottom: 2rem;"></div>
+
+        <h3><i data-lucide="calendar"></i> Schedules</h3>
+        <button onclick="openScheduleManager()" class="btn btn-ghost w-full mb-2">
+            Manage Timetables
+        </button>
+    </div>
+</div>
+
+<!-- Transport Modal -->
+<div id="transport-modal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+    <div class="card" style="width: 400px; max-width: 90%;">
+        <h3>Add Transport Officer</h3>
+        <input type="text" id="t-name" placeholder="Name" class="mb-2">
+        <input type="email" id="t-email" placeholder="Email" class="mb-2">
+        <input type="password" id="t-pass" placeholder="Password" class="mb-4">
+        <div class="flex gap-2">
+            <button onclick="addTransportUser()" class="btn btn-primary flex-1">Create</button>
+            <button onclick="document.getElementById('transport-modal').classList.add('hidden')"
+                class="btn btn-ghost flex-1">Cancel</button>
+        </div>
+    </div>
+</div>
+
+<!-- Schedule Manager Modal -->
+<div id="schedule-modal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+    <div class="card" style="width: 500px; max-width: 95%; max-height: 85vh; display: flex; flex-direction: column;">
+        <div class="flex justify-between items-center mb-4">
+            <h3 class="m-0"><i data-lucide="calendar"></i> Manage Timetable</h3>
+            <button onclick="document.getElementById('schedule-modal').classList.add('hidden')"
+                class="btn btn-sm btn-ghost">✕</button>
+        </div>
+
+        <div class="mb-4">
+            <label class="text-xs text-muted font-bold">SELECT BUS</label>
+            <select id="sched-bus-select" class="w-full p-2 border rounded" onchange="loadScheduleForBus()">
+                <option value="">-- Choose Bus --</option>
+            </select>
+        </div>
+
+        <div class="flex-1 overflow-y-auto border rounded p-2 bg-gray mb-4" id="sched-rows" style="min-height: 200px;">
+            <!-- Dynamic Rows -->
+            <p class="text-xs text-muted text-center mt-4">Select a bus to view/edit schedule.</p>
+        </div>
+
+        <button onclick="addSchedRow()" class="btn btn-sm btn-secondary mb-4 w-full dashed-border">
+            + Add Stop Row
+        </button>
+
+        <div class="flex gap-2">
+            <button onclick="saveSchedule()" class="btn btn-primary flex-1">Save Timetable</button>
+        </div>
     </div>
 </div>
 
@@ -109,12 +181,18 @@
                 // Map
                 if (b.lat && b.lon && b.status === 'active') {
                     if (markers[b.id]) markers[b.id].setLatLng([b.lat, b.lon]);
-                    else markers[b.id] = L.marker([b.lat, b.lon]).addTo(map).bindPopup(`<b>${b.number}</b>`);
+                    else markers[b.id] = L.marker([b.lat, b.lon]).addTo(map)
+                        .bindPopup(`<b>${b.number}</b>`)
+                        .on('click', () => focusBus(b.lat, b.lon));
                 }
 
                 // List
                 const div = document.createElement('div');
                 div.className = 'list-item';
+                // Click to zoom
+                div.style.cursor = 'pointer';
+                div.onclick = () => { if (b.lat) focusBus(b.lat, b.lon); };
+
                 div.innerHTML = `
                     <div>
                         <strong>${b.number}</strong>
@@ -188,32 +266,178 @@
     }
 
     async function addBus() {
-        // ... (Same Logic as before, just lighter) ...
         const no = document.getElementById('new-bus-no').value;
         const route = document.getElementById('new-bus-route').value;
-        const fileInput = document.getElementById('route-file');
-        let coords = "[]";
+        const driver = document.getElementById('new-bus-driver').value;
 
-        if (fileInput.files.length) {
-            const text = await fileInput.files[0].text();
-            // Basic parser for V2 - extend later for stops
-            coords = JSON.stringify(text.split('\n').map(l => {
-                const p = l.split(',');
-                return p.length >= 2 ? [parseFloat(p[0]), parseFloat(p[1])] : null;
-            }).filter(x => x));
-        }
-
-        if (!no || !route) return alert("Fill details");
+        if (!no || !route) return alert("Fill details (Number & Route required)");
 
         await fetch('/api/buses', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ number: no, route: route, coords: coords })
+            body: JSON.stringify({ bus_number: no, route_name: route, driver_name: driver, route_coords: "[]" })
         });
+        document.getElementById('new-bus-no').value = '';
         loadData();
     }
 
+    async function uploadBulk() {
+        const fileInput = document.getElementById('bulk-csv');
+        if (!fileInput.files.length) return alert("Select CSV file first");
+
+        const formData = new FormData();
+        formData.append('file', fileInput.files[0]);
+
+        const res = await fetch('/api/buses/bulk', { method: 'POST', body: formData });
+        const data = await res.json();
+
+        if (data.success) {
+            alert(`Success! Added ${data.count} new buses.`);
+            fileInput.value = '';
+            loadData();
+        } else {
+            alert("Error: " + data.error);
+        }
+    }
+
+    async function addTransportUser() {
+        const name = document.getElementById('t-name').value;
+        const email = document.getElementById('t-email').value;
+        const pass = document.getElementById('t-pass').value;
+
+        if (!name || !email || !pass) return alert("All fields required");
+
+        const res = await fetch('/api/users/transport', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name, email, password: pass })
+        });
+
+        if (res.ok) {
+            alert("Officer Added!");
+            document.getElementById('transport-modal').classList.add('hidden');
+            loadTransport();
+        } else {
+            alert("Error creating user");
+        }
+    }
+
+    async function loadTransport() {
+        try {
+            const res = await fetch('/api/users/transport');
+            const users = await res.json();
+            const list = document.getElementById('transport-list');
+            list.innerHTML = users.length ? '' : '<p class="text-xs text-muted mb-2">No officers found.</p>';
+
+            users.forEach(u => {
+                const div = document.createElement('div');
+                div.className = 'list-item';
+                div.innerHTML = `
+                    <div><strong>${u.name}</strong> <span class="text-xs text-muted">${u.email}</span></div>
+                    <span class="badge bg-green">Active</span>
+                `;
+                list.appendChild(div);
+            });
+        } catch (e) { }
+    }
+
+    function focusBus(lat, lon) {
+        map.flyTo([lat, lon], 16, { animate: true, duration: 1.5 });
+    }
+
+    // Initial Load
     setInterval(loadData, 5000);
     loadData();
+    loadTransport();
+    // --- SCHEDULE MANAGER LOGIC ---
+    let currentSchedBusId = null;
+
+    async function openScheduleManager() {
+        document.getElementById('schedule-modal').classList.remove('hidden');
+        // Load Buses into Select
+        const select = document.getElementById('sched-bus-select');
+        if (select.options.length <= 1) { // Load only if not already loaded
+            const res = await fetch('/api/buses');
+            const buses = await res.json();
+            buses.forEach(b => {
+                const opt = document.createElement('option');
+                opt.value = b.id;
+                opt.text = `${b.number} - ${b.route}`;
+                select.appendChild(opt);
+            });
+        }
+    }
+
+    async function loadScheduleForBus() {
+        const busId = document.getElementById('sched-bus-select').value;
+        currentSchedBusId = busId;
+        const container = document.getElementById('sched-rows');
+        container.innerHTML = 'Loading...';
+
+        if (!busId) {
+            container.innerHTML = '<p class="text-xs text-muted text-center mt-4">Select a bus to view/edit schedule.</p>';
+            return;
+        }
+
+        try {
+            const res = await fetch(`/api/schedules/${busId}`);
+            const stops = await res.json();
+            container.innerHTML = '';
+
+            if (stops.length === 0) {
+                // Add 3 default empty rows if empty
+                addSchedRow(); addSchedRow(); addSchedRow();
+            } else {
+                stops.forEach(s => addSchedRow(s.stop, s.time));
+            }
+        } catch (e) { container.innerHTML = 'Error loading'; }
+    }
+
+    function addSchedRow(stop = '', time = '') {
+        const container = document.getElementById('sched-rows');
+        const div = document.createElement('div');
+        div.className = 'flex gap-2 mb-2 sched-row';
+        div.innerHTML = `
+            <input type="text" placeholder="Stop Name" class="p-2 border rounded flex-1 stop-input" value="${stop}">
+            <input type="text" placeholder="Time (e.g. 08:30 AM)" class="p-2 border rounded w-32 time-input" value="${time}">
+            <button onclick="this.parentElement.remove()" class="btn btn-sm btn-ghost text-danger">✕</button>
+        `;
+        container.appendChild(div);
+    }
+
+    async function saveSchedule() {
+        if (!currentSchedBusId) return alert("Select a bus first");
+
+        const rows = document.querySelectorAll('.sched-row');
+        const payload = [];
+        rows.forEach(r => {
+            const s = r.querySelector('.stop-input').value;
+            const t = r.querySelector('.time-input').value;
+            if (s && t) payload.push({ stop: s, time: t });
+        });
+
+        if (payload.length === 0) return alert("Add at least one stop");
+
+        // 1. Clear Old
+        await fetch(`/api/schedules/${currentSchedBusId}`, { method: 'DELETE' });
+
+        // 2. Add New (Loop)
+        let successCount = 0;
+        for (const item of payload) {
+            await fetch('/api/schedules', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    bus_id: currentSchedBusId,
+                    stop: item.stop,
+                    time: item.time
+                })
+            });
+            successCount++;
+        }
+
+        alert(`Saved ${successCount} stops!`);
+        document.getElementById('schedule-modal').classList.add('hidden');
+    }
 </script>
 {% endblock %}

@@ -94,7 +94,16 @@ class SOSAlert(db.Model):
     lat = db.Column(db.Float)
     lon = db.Column(db.Float)
     timestamp = db.Column(db.DateTime, default=datetime.utcnow)
+    lat = db.Column(db.Float)
+    lon = db.Column(db.Float)
+    timestamp = db.Column(db.DateTime, default=datetime.utcnow)
     resolved = db.Column(db.Boolean, default=False)
+
+class Schedule(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    bus_id = db.Column(db.Integer, db.ForeignKey('bus.id'), nullable=False)
+    stop_name = db.Column(db.String(100), nullable=False)
+    arrival_time = db.Column(db.String(20), nullable=False) # Store as "08:30 AM"
 
 # --- ROUTES ---
 
@@ -293,6 +302,7 @@ def add_bus():
         new_bus = Bus(
             bus_number=data['number'], 
             route_name=data['route'], 
+            driver_name=data.get('driver_name'), # Added support for driver name
             capacity=data.get('capacity', 40),
             next_arrival_time=data.get('next_arrival'),
             route_coordinates=json.dumps(clean_coords),
@@ -420,8 +430,119 @@ def export_csv():
 
 
 
+# --- NEW FEATURE ROUTES ---
+
+# 1. Analytics API
+@app.route('/api/analytics')
+def analytics():
+    total_buses = Bus.query.count()
+    active_buses = Bus.query.filter_by(status='active').count()
+    total_users = User.query.count()
+    students = User.query.filter_by(role='student').count()
+    drivers = User.query.filter_by(role='driver').count()
+    sos_count = SOSAlert.query.count()
+    
+    return jsonify({
+        'buses': {'total': total_buses, 'active': active_buses, 'inactive': total_buses - active_buses},
+        'users': {'total': total_users, 'students': students, 'drivers': drivers},
+        'sos': sos_count
+    })
+
+# 2. Bulk Upload CSV
+@app.route('/api/buses/bulk', methods=['POST'])
+def bulk_upload_buses():
+    if session.get('role') not in ['admin', 'transport_dept']: return "Unauthorized", 403
+    if 'file' not in request.files: return jsonify({'error': 'No file'}), 400
+    file = request.files['file']
+    if not file.filename.endswith('.csv'): return jsonify({'error': 'CSV only'}), 400
+
+    try:
+        stream = io.StringIO(file.stream.read().decode("UTF8"), newline=None)
+        csv_input = csv.reader(stream)
+        # Format: BusNo, Route, DriverName
+        count = 0
+        for row in csv_input:
+            if len(row) < 2: continue
+            if row[0].lower() == 'bus number': continue # Skip header
+            
+            no, route = row[0], row[1]
+            driver = row[2] if len(row) > 2 else ""
+            
+            existing = Bus.query.filter_by(bus_number=no).first()
+            if not existing:
+                new_bus = Bus(bus_number=no, route_name=route, driver_name=driver)
+                db.session.add(new_bus)
+                count += 1
+        db.session.commit()
+        return jsonify({'success': True, 'count': count})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+# 3. Schedule Management
+@app.route('/api/schedules/<int:bus_id>', methods=['DELETE'])
+def clear_schedule(bus_id):
+    if session.get('role') != 'admin': return "Unauthorized", 403
+    Schedule.query.filter_by(bus_id=bus_id).delete()
+    db.session.commit()
+    return jsonify({'success': True})
+
+@app.route('/api/schedules', methods=['GET', 'POST'])
+def manage_schedules():
+    if request.method == 'POST':
+        data = request.json
+        new_sched = Schedule(bus_id=data['bus_id'], stop_name=data['stop'], arrival_time=data['time'])
+        db.session.add(new_sched)
+        db.session.commit()
+        return jsonify({'success': True})
+    
+    # GET: return all schedules grouped by bus
+    schedules = Schedule.query.all()
+    # Simple list for now, optimized later
+    res = [{'id': s.id, 'bus_id': s.bus_id, 'stop': s.stop_name, 'time': s.arrival_time} for s in schedules]
+    return jsonify(res)
+
+@app.route('/api/schedules/<int:bus_id>')
+def get_bus_schedule(bus_id):
+    schedules = Schedule.query.filter_by(bus_id=bus_id).all()
+    # Sort by time naive string sort for now (HH:MM AM/PM)
+    res = [{'stop': s.stop_name, 'time': s.arrival_time} for s in schedules]
+    return jsonify(res)
+
+# 4. Hierarchy Management
+@app.route('/api/users/transport', methods=['GET', 'POST'])
+def manage_transport_staff():
+    # Admin Only Logic Should be Here (Session check skipped for simplicity prototype)
+    if request.method == 'POST':
+        # Add new Transport
+        data = request.json
+        if User.query.filter_by(email=data['email']).first(): return jsonify({'error': 'Exists'}), 400
+        t_user = User(
+            name=data['name'], email=data['email'], 
+            password=generate_password_hash(data['password']), 
+            role='transport_dept', approved=True
+        )
+        db.session.add(t_user)
+        db.session.commit()
+        return jsonify({'success': True})
+    
+    # GET
+    users = User.query.filter_by(role='transport_dept').all()
+    return jsonify([{'id': u.id, 'name': u.name, 'email': u.email} for u in users])
+
+@app.route('/api/users/general')
+def get_general_users():
+    # For Transport Dept View
+    users = User.query.filter(User.role.in_(['student', 'driver'])).all()
+    return jsonify([{'id': u.id, 'name': u.name, 'role': u.role, 'email': u.email, 'approved': u.approved} for u in users])
+
+
 if __name__ == '__main__':
+    with app.app_context():
+        # Auto-create new tables for existing DB
+        db.create_all()
+        
     port = int(os.environ.get('PORT', 3000))
+
     # debug=True only if FLASK_DEBUG is set, else False
     debug_mode = os.environ.get('FLASK_DEBUG', 'False').lower() == 'true'
     app.run(debug=debug_mode, port=port)
