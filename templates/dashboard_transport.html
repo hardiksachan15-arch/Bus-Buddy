@@ -8,45 +8,56 @@
 {% endblock %}
 
 {% block content %}
-<div class="card mb-2" style="background: linear-gradient(135deg, var(--primary-dark), #1e1b4b); color: white;">
-    <div class="flex justify-between items-center">
-        <div>
-            <h2 style="margin-bottom: 5px;">Transport Control Center</h2>
-            <div class="text-xs" style="opacity: 0.8;">Overview of all active routes and drivers</div>
+<div class="grid">
+    <!-- Header Stats -->
+    <div class="card col-span-3 flex items-center justify-between mb-4">
+        <div class="flex items-center gap-4">
+            <div style="background: var(--primary-light); padding: 12px; border-radius: 50%;">
+                <i data-lucide="radio" color="white" width="24"></i>
+            </div>
+            <div>
+                <h2 style="margin: 0; font-size: 1.5rem; color: var(--primary-dark);">Transport Control Center</h2>
+                <div class="text-xs text-muted">Real-time overview of active routes and drivers</div>
+            </div>
         </div>
-        <div style="font-size: 2rem; font-weight: 800;">
-            <i data-lucide="radio" style="animation: pulse 2s infinite;"></i>
+        <div class="badge bg-green px-4 py-2 text-sm">
+            <i data-lucide="activity" width="12" class="inline mr-1"></i> Live Monitoring
         </div>
     </div>
-</div>
 
-<div class="grid">
     <!-- Main Map -->
     <div class="card col-span-2">
-        <h3 class="mb-2"><i data-lucide="map"></i> Live Fleet Tracking</h3>
-        <div id="map" style="height: 500px; width: 100%;"></div>
+        <h3 class="mb-2 flex items-center gap-2">
+            <i data-lucide="map" class="text-primary"></i> Live Fleet Tracking
+        </h3>
+        <div id="map" style="height: 500px; width: 100%; border-radius: var(--radius-sm);"></div>
     </div>
 
-    <!-- Active Drivers Panel -->
-    <div class="card">
-        <h3><i data-lucide="steering-wheel"></i> Active Drivers</h3>
-        <div id="driver-list" style="max-height: 400px; overflow-y: auto;">
-            Loading active drivers...
+    <!-- Right Panel -->
+    <div class="flex flex-col gap-4">
+        <!-- Active Drivers Panel -->
+        <div class="card">
+            <h3 class="flex items-center gap-2">
+                <i data-lucide="steering-wheel" class="text-primary"></i> Active Drivers
+            </h3>
+            <div id="driver-list" style="max-height: 250px; overflow-y: auto;">
+                <p class="text-muted text-center p-4">Loading active drivers...</p>
+            </div>
         </div>
-    </div>
 
-    <!-- Quick Actions / Reports -->
-    <div class="card">
-        <h3><i data-lucide="file-text"></i> Reports</h3>
-        <button class="btn btn-primary w-full mb-2" onclick="window.location.href='/api/export/csv'">
-            <i data-lucide="download"></i> Export User Data CSV
-        </button>
-        <button class="btn btn-ghost w-full" disabled>
-            <i data-lucide="bar-chart-2"></i> Route Analytics (Coming Soon)
-        </button>
+        <!-- Quick Actions / Reports -->
+        <div class="card">
+            <h3><i data-lucide="file-text" class="text-primary"></i> Reports</h3>
+            <button class="btn btn-primary w-full mb-2" onclick="window.location.href='/api/export/csv'">
+                <i data-lucide="download"></i> Export User Data CSV
+            </button>
+            <button class="btn btn-ghost w-full" disabled>
+                <i data-lucide="bar-chart-2"></i> Route Analytics (Coming Soon)
+            </button>
 
-        <h3 class="mt-4"><i data-lucide="alert-octagon"></i> Recent SOS</h3>
-        <div id="sos-list-transport" style="font-size: 0.85rem;"></div>
+            <h3 class="mt-4 text-danger"><i data-lucide="alert-octagon"></i> Recent SOS</h3>
+            <div id="sos-list-transport" style="font-size: 0.85rem; max-height: 150px; overflow-y: auto;"></div>
+        </div>
     </div>
 </div>
 {% endblock %}
@@ -54,7 +65,8 @@
 {% block scripts %}
 <script>
     const map = L.map('map').setView([28.6139, 77.2090], 12);
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+    // Standard Light Mode Tiles
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
         attribution: '&copy; OpenStreetMap &copy; CARTO'
     }).addTo(map);
 

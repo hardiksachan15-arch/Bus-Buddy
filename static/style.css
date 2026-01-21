@@ -253,17 +253,26 @@ select:focus {
 }
 
 /* --- AUTH PAGE SPECIAL --- */
+/* --- AUTH PAGE SPECIAL --- */
 .auth-container {
     display: flex;
     justify-content: center;
     align-items: center;
     min-height: 80vh;
+    background: radial-gradient(circle at top right, #e0e7ff, transparent), radial-gradient(circle at bottom left, #ffe4e6, transparent);
 }
 
 .auth-card {
     width: 100%;
-    max-width: 400px;
+    max-width: 420px;
     text-align: center;
+    background: rgba(255, 255, 255, 0.85);
+    /* More opaque for contrast */
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.5);
+    padding: 2.5rem;
+    box-shadow: 0 10px 40px -10px rgba(0, 0, 0, 0.1);
 }
 
 .auth-title {
