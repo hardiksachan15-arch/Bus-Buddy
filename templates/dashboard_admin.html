@@ -1,0 +1,219 @@
+{% extends "base.html" %}
+
+{% block title %}Admin Dashboard{% endblock %}
+
+{% block head %}
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+{% endblock %}
+
+{% block content %}
+<!-- KPI Stats Row -->
+<div class="grid" style="grid-template-columns: repeat(3, 1fr); gap: 1rem; margin-bottom: 2rem;">
+    <div class="card" style="padding: 1rem; display: flex; align-items: center; gap: 1rem;">
+        <div style="background: var(--primary-light); padding: 10px; border-radius: 50%;">
+            <i data-lucide="bus" color="white"></i>
+        </div>
+        <div>
+            <h4 class="text-muted" style="font-size: 0.9rem;">Total Fleet</h4>
+            <strong style="font-size: 1.5rem;" id="stat-total">--</strong>
+        </div>
+    </div>
+    <div class="card" style="padding: 1rem; display: flex; align-items: center; gap: 1rem;">
+        <div style="background: var(--success); padding: 10px; border-radius: 50%;">
+            <i data-lucide="activity" color="white"></i>
+        </div>
+        <div>
+            <h4 class="text-muted" style="font-size: 0.9rem;">Active Now</h4>
+            <strong style="font-size: 1.5rem;" id="stat-active">--</strong>
+        </div>
+    </div>
+    <div class="card" style="padding: 1rem; display: flex; align-items: center; gap: 1rem;">
+        <div style="background: var(--danger); padding: 10px; border-radius: 50%;">
+            <i data-lucide="alert-triangle" color="white"></i>
+        </div>
+        <div>
+            <h4 class="text-muted" style="font-size: 0.9rem;">SOS Alerts</h4>
+            <strong style="font-size: 1.5rem;" id="stat-sos">0</strong>
+        </div>
+    </div>
+</div>
+
+<div class="grid">
+    <!-- Map Section -->
+    <div class="card col-span-2">
+        <div class="flex justify-between items-center mb-2">
+            <h3><i data-lucide="map"></i> Live Fleet Overview</h3>
+            <span class="badge bg-green">Live Updates On</span>
+        </div>
+        <div id="map" style="height: 450px; width: 100%;"></div>
+    </div>
+
+    <!-- Bus Management -->
+    <div class="card">
+        <h3><i data-lucide="plus-circle"></i> Add New Bus</h3>
+        <div class="form-group bg-gray p-4 rounded-lg">
+            <input type="text" id="new-bus-no" placeholder="Bus Number (e.g. DL-1C-0001)">
+            <input type="text" id="new-bus-route" placeholder="Route Name">
+
+            <label class="text-xs font-bold text-muted mb-1 block">Route File (lat,lon,stop_name)</label>
+            <div style="position: relative;">
+                <input type="file" id="route-file" accept=".txt" style="padding: 0.5rem; background: white;">
+            </div>
+
+            <button onclick="addBus()" class="btn btn-primary w-full mt-4">Add to Fleet</button>
+        </div>
+
+        <h4 class="mt-4 mb-2 text-muted uppercase text-xs font-bold">Current Fleet</h4>
+        <div id="bus-list" style="max-height: 250px; overflow-y: auto;"></div>
+    </div>
+
+    <!-- SOS & Approvals -->
+    <div class="card">
+        <h3 class="text-danger"><i data-lucide="alert-octagon"></i> SOS Alerts</h3>
+        <div id="sos-list" style="max-height: 200px; overflow-y: auto;"></div>
+    </div>
+
+    <div class="card">
+        <h3><i data-lucide="users"></i> Pending Approvals</h3>
+        <div id="pending-list" style="max-height: 200px; overflow-y: auto;"></div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+    const map = L.map('map').setView([28.6139, 77.2090], 12);
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+        attribution: '&copy; OpenStreetMap'
+    }).addTo(map);
+
+    let markers = {};
+    let polylines = {};
+
+    async function loadData() {
+        try {
+            // 1. Buses
+            const resBuses = await fetch('/api/buses');
+            const buses = await resBuses.json();
+
+            // Stats
+            document.getElementById('stat-total').innerText = buses.length;
+            document.getElementById('stat-active').innerText = buses.filter(b => b.status === 'active').length;
+
+            const busList = document.getElementById('bus-list');
+            busList.innerHTML = '';
+
+            buses.forEach(b => {
+                // Map
+                if (b.lat && b.lon && b.status === 'active') {
+                    if (markers[b.id]) markers[b.id].setLatLng([b.lat, b.lon]);
+                    else markers[b.id] = L.marker([b.lat, b.lon]).addTo(map).bindPopup(`<b>${b.number}</b>`);
+                }
+
+                // List
+                const div = document.createElement('div');
+                div.className = 'list-item';
+                div.innerHTML = `
+                    <div>
+                        <strong>${b.number}</strong>
+                        <div class="text-xs text-muted">${b.route}</div>
+                    </div>
+                    <span class="badge ${b.status === 'active' ? 'bg-green' : 'bg-gray'}">${b.status}</span>
+                `;
+                busList.appendChild(div);
+
+                if (b.coords) {
+                    try {
+                        const latlngs = JSON.parse(b.coords);
+                        if (!polylines[b.id]) polylines[b.id] = L.polyline(latlngs, { color: '#6366f1' }).addTo(map);
+                    } catch (e) { }
+                }
+            });
+
+            // 2. SOS
+            const resSOS = await fetch('/api/sos/history');
+            const alerts = await resSOS.json();
+            document.getElementById('stat-sos').innerText = alerts.length;
+
+            const sosList = document.getElementById('sos-list');
+            sosList.innerHTML = alerts.length ? '' : '<p class="text-xs text-muted">No alerts.</p>';
+            alerts.slice(0, 5).forEach(a => {
+                const div = document.createElement('div');
+                div.className = 'list-item';
+                div.style.background = '#FEF2F2';
+                div.innerHTML = `
+                    <div class="text-danger flex items-center gap-2 font-bold text-sm">
+                        <i data-lucide="alert-circle" width="14"></i> ${a.driver}
+                    </div>
+                    <a href="https://maps.google.com/?q=${a.lat},${a.lon}" target="_blank" class="text-xs btn btn-sm btn-ghost">Map</a>
+                `;
+                sosList.appendChild(div);
+            });
+
+            // 3. Approvals
+            const resUsers = await fetch('/api/users/pending');
+            const users = await resUsers.json();
+            const pendingList = document.getElementById('pending-list');
+            pendingList.innerHTML = users.length ? '' : '<p class="text-xs text-muted">No pending approvals.</p>';
+
+            users.forEach(u => {
+                const div = document.createElement('div');
+                div.className = 'list-item';
+                div.innerHTML = `
+                    <div>
+                        <strong>${u.name}</strong> <span class="text-xs text-muted">(${u.role})</span>
+                    </div>
+                    <div class="flex gap-1">
+                        <button onclick="approve(${u.id}, true)" class="btn btn-sm btn-success">✓</button>
+                        <button onclick="approve(${u.id}, false)" class="btn btn-sm btn-danger">✗</button>
+                    </div>
+                `;
+                pendingList.appendChild(div);
+            });
+
+            lucide.createIcons();
+
+        } catch (e) { console.error(e); }
+    }
+
+    async function approve(id, status) {
+        await fetch('/api/users/approve', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ user_id: id, approved: status })
+        });
+        loadData();
+    }
+
+    async function addBus() {
+        // ... (Same Logic as before, just lighter) ...
+        const no = document.getElementById('new-bus-no').value;
+        const route = document.getElementById('new-bus-route').value;
+        const fileInput = document.getElementById('route-file');
+        let coords = "[]";
+
+        if (fileInput.files.length) {
+            const text = await fileInput.files[0].text();
+            // Basic parser for V2 - extend later for stops
+            coords = JSON.stringify(text.split('\n').map(l => {
+                const p = l.split(',');
+                return p.length >= 2 ? [parseFloat(p[0]), parseFloat(p[1])] : null;
+            }).filter(x => x));
+        }
+
+        if (!no || !route) return alert("Fill details");
+
+        await fetch('/api/buses', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ number: no, route: route, coords: coords })
+        });
+        loadData();
+    }
+
+    setInterval(loadData, 5000);
+    loadData();
+</script>
+{% endblock %}

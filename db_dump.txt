@@ -1,0 +1,8 @@
+=== SYSTEM USERS ===
+ID    Name                 Email                          Role            Approved
+--------------------------------------------------------------------------------
+1     System Admin         admin@busbuddy.com             admin           True
+2     pp                   abc@gmail.com                  student         True
+
+=== FLEET BUSES ===
+No buses found.

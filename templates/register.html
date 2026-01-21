@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+
+{% block title %}Register{% endblock %}
+
+{% block content %}
+<div class="auth-container">
+    <div class="card auth-card">
+        <h2 class="auth-title" style="font-size: 1.5rem;">Join Bus Buddy</h2>
+
+        <form method="POST" action="/register">
+            <div style="position: relative;">
+                <i data-lucide="user"
+                    style="position: absolute; left: 10px; top: 12px; color: var(--text-muted); width: 18px;"></i>
+                <input type="text" name="name" placeholder="Full Name" required style="padding-left: 2.5rem;">
+            </div>
+
+            <div style="position: relative;">
+                <i data-lucide="mail"
+                    style="position: absolute; left: 10px; top: 12px; color: var(--text-muted); width: 18px;"></i>
+                <input type="email" name="email" placeholder="Email Address" required style="padding-left: 2.5rem;">
+            </div>
+
+            <div style="position: relative;">
+                <i data-lucide="phone"
+                    style="position: absolute; left: 10px; top: 12px; color: var(--text-muted); width: 18px;"></i>
+                <input type="text" name="phone" placeholder="Phone Number" required style="padding-left: 2.5rem;">
+            </div>
+
+            <div style="position: relative;">
+                <i data-lucide="lock"
+                    style="position: absolute; left: 10px; top: 12px; color: var(--text-muted); width: 18px;"></i>
+                <input type="password" name="password" placeholder="Password" required style="padding-left: 2.5rem;">
+            </div>
+
+            <div
+                style="text-align: left; margin-bottom: 0.5rem; font-size: 0.85rem; font-weight: bold; color: var(--text-muted);">
+                I am a:</div>
+            <select name="role" required>
+                <option value="student">Student</option>
+                <option value="driver">Bus Driver</option>
+                <option value="transport_dept">Transport Department</option>
+            </select>
+
+            <button type="submit" class="btn btn-primary w-full" style="margin-top: 1rem;">
+                Create Account
+            </button>
+        </form>
+
+        <div style="margin-top: 1.5rem; font-size: 0.9rem; color: var(--text-muted);">
+            Already have an account? <a href="{{ url_for('login') }}"
+                style="color: var(--primary); font-weight: 600; text-decoration: none;">Login</a>
+        </div>
+    </div>
+</div>
+{% endblock %}
