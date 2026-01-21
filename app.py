@@ -85,6 +85,15 @@ class Bus(db.Model):
     route_coordinates = db.Column(db.Text) # JSON string of coords
     stops = db.Column(db.Text) # JSON string of [{"name": "Stop A", "lat":.., "lon":..}, ...]
 
+class SOSAlert(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    bus_id = db.Column(db.Integer)
+    driver_name = db.Column(db.String(100))
+    lat = db.Column(db.Float)
+    lon = db.Column(db.Float)
+    timestamp = db.Column(db.DateTime, default=datetime.utcnow)
+    resolved = db.Column(db.Boolean, default=False)
+
 # --- ROUTES ---
 
 @app.route('/')
@@ -92,6 +101,51 @@ def index():
     if 'user_id' in session:
         return redirect(url_for('dashboard'))
     return redirect(url_for('login'))
+
+# ... (Routes continue) ...
+
+# --- INIT DB & SEED DATA ---
+def init_db_data():
+    with app.app_context():
+        db.create_all()
+        
+        # 1. Restore Admin if missing
+        if not User.query.filter_by(email='work.694206969@gmail.com').first():
+            print("⚡ Auto-Restoring Admin User...")
+            admin_pw = generate_password_hash('admin')
+            admin = User(
+                name='Admin User', 
+                email='work.694206969@gmail.com', 
+                password=admin_pw, 
+                role='admin', 
+                phone='6969696969', 
+                approved=True
+            )
+            db.session.add(admin)
+        
+        # 2. Restore Sample Bus if DB is empty
+        if not Bus.query.first():
+            print("⚡ Auto-Restoring Sample Bus...")
+            bus = Bus(
+                bus_number='DL-1S-0001',
+                route_name='Route 1 (Main Campus)',
+                capacity=40,
+                status='inactive',
+                # Sample route: North Campus/GTB Nagar area
+                route_coordinates='[[28.7041, 77.1025], [28.6945, 77.1230], [28.6845, 77.1430]]',
+                stops=json.dumps([
+                    {"name": "GTB Nagar Metro", "lat": 28.7041, "lon": 77.1025},
+                    {"name": "Vishwavidyalaya", "lat": 28.6945, "lon": 77.1230},
+                    {"name": "Civil Lines", "lat": 28.6845, "lon": 77.1430}
+                ]),
+                google_maps_link=""
+            )
+            db.session.add(bus)
+            
+        db.session.commit()
+
+# Run Init
+init_db_data()
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
@@ -347,14 +401,7 @@ def export_csv():
         headers={"Content-disposition": "attachment; filename=users_export.csv"}
     )
 
-# --- INIT DB ---
-with app.app_context():
-    db.create_all()
-    if not User.query.filter_by(email='work.694206969@gmail.com').first():
-        admin_pw = generate_password_hash('admin')
-        admin = User(name='Admin69', email='work.694206969@gmail.com', password=admin_pw, role='admin', phone='6969696969', approved=True)
-        db.session.add(admin)
-        db.session.commit()
+
 
 if __name__ == '__main__':
     app.run(debug=True, port=3000)
