@@ -12,10 +12,12 @@
 <!-- Force Dark Mode for this page -->
 <script>document.body.classList.add('driver-mode');</script>
 
-<div class="container cockpit-grid" style="max-width: 100%; padding: 1rem;">
+<!-- Full Width Container without margins -->
+<div class="cockpit-grid">
 
-    <!-- LEFT PANEL: CONTROLS -->
-    <div class="card flex flex-col gap-4" style="height: fit-content;">
+    <!-- LEFT PANEL: CONTROLS (Sidebar) -->
+    <div class="card flex flex-col gap-4"
+        style="width: 380px; height: 100%; border-radius: 0; border-right: 1px solid rgba(255,255,255,0.1); border-left: none; border-top: none; border-bottom: none; overflow-y: auto;">
         <div class="flex items-center gap-2 mb-2">
             <i data-lucide="steering-wheel" class="text-primary-light" size="32"></i>
             <h2 class="text-xl font-bold">Trip Controls</h2>
@@ -65,14 +67,15 @@
     </div>
 
     <!-- RIGHT PANEL: MAP -->
-    <div class="card" style="padding: 0; overflow: hidden; position: relative; min-height: 500px;">
+    <!-- RIGHT PANEL: MAP (Flex Grow) -->
+    <div style="flex: 1; position: relative; height: 100%;">
         <!-- Refresh Button Overlay -->
         <button id="refresh-map-btn" class="btn btn-primary"
-            style="position: absolute; top: 1rem; right: 1rem; z-index: 1000; box-shadow: 0 4px 10px rgba(0,0,0,0.5);">
+            style="position: absolute; top: 10px; right: 10px; z-index: 1000; box-shadow: 0 4px 20px rgba(0,0,0,0.5);">
             <i data-lucide="refresh-cw"></i> Refresh Map
         </button>
 
-        <div id="map" style="height: 100%; width: 100%;"></div>
+        <div id="map" style="height: 100%; width: 100%; border-radius: 0;"></div>
     </div>
 
 </div>
