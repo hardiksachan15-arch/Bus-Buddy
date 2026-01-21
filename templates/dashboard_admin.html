@@ -10,34 +10,70 @@
 {% block content %}
 <div class="grid">
     <!-- Map Section -->
-    <div class="card col-span-2">
-        <h3><i data-lucide="map"></i> Live Fleet Map</h3>
-        <div id="map" style="height: 400px; width: 100%; border-radius: 0.5rem;"></div>
+    <div class="card col-span-2 shadow-lg">
+        <div class="flex justify-between items-center mb-2">
+            <h3 class="flex items-center gap-2"><i data-lucide="map"></i> Live Fleet Map</h3>
+            <button onclick="loadData()" class="btn btn-sm btn-ghost hover:bg-gray-100"><i data-lucide="refresh-cw"></i>
+                Refresh</button>
+        </div>
+        <div id="map" style="height: 400px; width: 100%; border-radius: 0.75rem;"></div>
+    </div>
+
+    <!-- SOS Alerts Section -->
+    <div class="card col-span-2 border-red-200 bg-red-50" style="border-width: 1px;">
+        <h3 class="text-red-700 flex items-center gap-2"><i data-lucide="alert-triangle"></i> SOS Alerts</h3>
+        <div id="sos-list"
+            style="max-height: 200px; overflow-y: auto; display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 1rem;">
+            Loading alerts...
+        </div>
     </div>
 
     <!-- Stats / Fleet -->
-    <div class="card">
-        <h3><i data-lucide="bus"></i> Fleet Management</h3>
-        <p class="text-muted" style="font-size: 0.9rem; margin-bottom: 1rem;">
-            Buses appear <strong>INACTIVE</strong> until a driver logs in and starts a trip.
+    <div class="card shadow-lg">
+        <h3 class="flex items-center gap-2"><i data-lucide="bus"></i> Fleet Management</h3>
+        <p class="text-gray-500 mb-4 text-sm">
+            Manage your buses, assign routes, and monitor fleet status.
         </p>
-        <div class="form-group">
-            <input type="text" id="new-bus-no" placeholder="Bus Number">
-            <input type="text" id="new-bus-route" placeholder="Route Name" style="margin-top:0.5rem;">
-            <input type="number" id="new-bus-cap" placeholder="Capacity" style="margin-top:0.5rem;" value="40">
-            <button onclick="addBus()" class="btn btn-sm btn-primary w-full mt-2">Add Bus</button>
+        <div class="form-group p-5 bg-gray-50 rounded-lg border border-gray-100">
+            <strong class="block mb-3 text-lg text-gray-800">Add New Bus</strong>
+
+            <div class="grid grid-cols-2 gap-2">
+                <input type="text" id="new-bus-no" placeholder="Bus Number (e.g. DL-01-1234)"
+                    class="w-full p-2 border rounded focus:ring-2 focus:ring-blue-500">
+                <input type="number" id="new-bus-cap" placeholder="Capacity" value="40"
+                    class="w-full p-2 border rounded">
+            </div>
+
+            <input type="text" id="new-bus-route" placeholder="Route Name" class="w-full p-2 border rounded mt-2">
+            <input type="text" id="new-bus-gmaps" placeholder="Google Maps Link" class="w-full p-2 border rounded mt-2">
+
+            <!-- File Upload -->
+            <div class="mt-3">
+                <label class="text-xs font-bold text-gray-600 block mb-1">Route File (.txt coordinates)</label>
+                <div class="flex gap-2">
+                    <input type="file" id="route-file" accept=".txt" class="text-sm p-1 border rounded bg-white w-full">
+                </div>
+                <p class="text-xs text-gray-400 mt-1">Format: lat, lon (one per line)</p>
+            </div>
+
+            <!-- Hidden Coords Input (Populated by JS) -->
+            <textarea id="new-bus-coords" class="hidden"></textarea>
+
+            <button onclick="addBus()"
+                class="btn btn-sm btn-primary w-full mt-4 py-2 font-bold shadow-md hover:shadow-lg transition">ADD BUS
+                TO FLEET</button>
         </div>
-        <div id="bus-list" style="max-height: 200px; overflow-y: auto; margin-top: 1rem;"></div>
+        <div id="bus-list" style="max-height: 300px; overflow-y: auto; margin-top: 1rem;"></div>
     </div>
 
     <!-- Pending Approvals -->
-    <div class="card">
-        <h3><i data-lucide="user-plus"></i> Pending Approvals</h3>
+    <div class="card shadow-lg">
+        <h3 class="flex items-center gap-2"><i data-lucide="user-plus"></i> Pending Approvals</h3>
         <div id="pending-list" style="max-height: 300px; overflow-y: auto;">Loading...</div>
     </div>
 
     <!-- User Database (Categories) -->
-    <div class="card col-span-2">
+    <div class="card col-span-2 shadow-lg">
         <h3><i data-lucide="users"></i> User Database</h3>
         <div id="user-filter-group" style="display: flex; gap: 1rem; margin-bottom: 1rem;">
             <button onclick="renderUserList('student')" class="btn btn-sm btn-ghost">Students</button>
@@ -58,12 +94,13 @@
 
     // --- STATE ---
     let markers = {};
+    let polylines = {};
     let allUsers = [];
-    let currentFilter = 'all'; // Fix: Track active filter
+    let currentFilter = 'all';
 
     async function loadData() {
         try {
-            // 1. Load Buses (For Map & List)
+            // 1. Load Buses
             const resBuses = await fetch('/api/buses');
             const buses = await resBuses.json();
 
@@ -71,74 +108,113 @@
             const busList = document.getElementById('bus-list');
             busList.innerHTML = '';
             buses.forEach(b => {
-                // Update Map
+                // Update Map Markers
                 if (b.lat && b.lon && b.status === 'active') {
                     if (markers[b.id]) {
                         markers[b.id].setLatLng([b.lat, b.lon]);
                     } else {
                         markers[b.id] = L.marker([b.lat, b.lon]).addTo(map)
-                            .bindPopup(`<b>${b.number}</b><br>${b.route}<br>Driver: ${b.driver || 'Unknown'}`);
+                            .bindPopup(`<b>${b.number}</b><br>${b.route}<br>Driver: ${b.driver || 'Unknown'}<br>Next: ${b.next_arrival || '--'}`);
                     }
                 } else if (markers[b.id]) {
                     map.removeLayer(markers[b.id]);
                     delete markers[b.id];
                 }
 
+                // Update Map Routes
+                if (b.coords) {
+                    try {
+                        const latlngs = JSON.parse(b.coords);
+                        if (!polylines[b.id]) {
+                            polylines[b.id] = L.polyline(latlngs, { color: '#3b82f6', weight: 4, opacity: 0.7 }).addTo(map);
+                        }
+                    } catch (e) { }
+                }
+
                 // Update List UI
                 const div = document.createElement('div');
-                div.className = 'list-item';
-                const driverInfo = b.driver ? `<span class="text-xs text-success">Driven by: ${b.driver}</span>` : '<span class="text-xs text-muted">No Driver</span>';
+                div.className = 'list-item p-3 border-b border-gray-100 hover:bg-gray-50';
+                const driverInfo = b.driver ? `<span class="text-xs text-green-600 font-semibold">● Driven by: ${b.driver}</span>` : '<span class="text-xs text-gray-400">● Inactive</span>';
+
+                // Show Dynamic ETA
+                const timingInfo = b.next_arrival ? `<span class="text-xs bg-blue-100 text-blue-700 px-1 rounded font-bold">ETA: ${b.next_arrival}</span>` : '';
+
                 div.innerHTML = `
-                    <div>
-                        <div>${b.number}</div>
-                        ${driverInfo}
-                    </div>
-                    <div class="text-right">
-                         <div class="text-xs text-muted">${b.route}</div>
-                         <span class="badge ${b.status === 'active' ? 'bg-green' : 'bg-gray'}">${b.status}</span>
+                    <div class="flex justify-between items-start">
+                        <div>
+                            <div class="font-bold text-gray-800">${b.number}</div>
+                            <div class="text-xs text-gray-500 mb-1">${b.route}</div>
+                            ${driverInfo} <br> ${timingInfo}
+                        </div>
+                        <div class="text-right">
+                             <span class="badge ${b.status === 'active' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-600'} text-xs font-semibold px-2 py-1 rounded-full">${b.status}</span>
+                             ${b.gmaps ? `<a href="${b.gmaps}" target="_blank" class="text-xs text-blue-500 hover:text-blue-700 block mt-2 flex items-center justify-end gap-1"><i data-lucide="external-link" style="width:12px"></i>Map</a>` : ''}
+                        </div>
                     </div>
                 `;
                 busList.appendChild(div);
             });
+            lucide.createIcons();
 
-            // 2. Load Pending Users
+            // 2. Load SOS Alerts
+            const resSOS = await fetch('/api/sos/history');
+            const alerts = await resSOS.json();
+            const sosList = document.getElementById('sos-list');
+            sosList.innerHTML = alerts.length ? '' : '<p class="text-gray-400 p-4 text-center italic">No active SOS alerts.</p>';
+
+            alerts.slice(0, 6).forEach(a => {
+                const item = document.createElement('div');
+                item.className = 'list-item bg-red-50 border border-red-200 rounded p-3 shadow-sm';
+                item.innerHTML = `
+                    <div class="flex justify-between items-center">
+                        <div>
+                            <div class="text-red-700 font-bold flex items-center gap-2"><i data-lucide="alert-circle" width="16"></i> SOS: ${a.driver}</div>
+                            <div class="text-xs text-gray-500">${a.time}</div>
+                        </div>
+                        <div>
+                            <a href="https://www.google.com/maps?q=${a.lat},${a.lon}" target="_blank" class="btn btn-sm btn-outline-danger">Locate</a>
+                        </div>
+                    </div>
+                `;
+                sosList.appendChild(item);
+            });
+            lucide.createIcons();
+
+
+            // 3. Pending Approvals
             const resUsers = await fetch('/api/users/pending');
             const users = await resUsers.json();
             const pendingList = document.getElementById('pending-list');
-            pendingList.innerHTML = users.length ? '' : '<p class="text-muted">No pending approvals.</p>';
+            pendingList.innerHTML = users.length ? '' : '<p class="text-gray-400 p-2 italic">No pending approvals.</p>';
 
             users.forEach(u => {
                 const div = document.createElement('div');
-                div.className = 'list-item';
+                div.className = 'list-item flex justify-between items-center p-2';
                 div.innerHTML = `
-                    <div><strong>${u.name}</strong> <span class="text-xs text-muted">(${u.role})</span></div>
-                    <div>
-                        <button onclick="approve(${u.id}, true)" class="btn btn-sm btn-success">✓</button>
-                        <button onclick="approve(${u.id}, false)" class="btn btn-sm btn-danger">✗</button>
+                    <div><strong>${u.name}</strong> <span class="text-xs text-gray-500">(${u.role})</span></div>
+                    <div class="flex gap-2">
+                        <button onclick="approve(${u.id}, true)" class="btn btn-sm bg-green-500 text-white hover:bg-green-600 rounded px-2">✓</button>
+                        <button onclick="approve(${u.id}, false)" class="btn btn-sm bg-red-500 text-white hover:bg-red-600 rounded px-2">✗</button>
                     </div>
                 `;
                 pendingList.appendChild(div);
             });
 
-            // 3. Load All Users (for DB)
+            // 4. All Users
             const resAll = await fetch('/api/users/all');
             allUsers = await resAll.json();
-            renderUserList(currentFilter); // Fix: Use current filter
+            renderUserList(currentFilter);
         } catch (e) {
             console.error("Data load error:", e);
         }
     }
 
     function renderUserList(filter) {
-        currentFilter = filter; // Update state
-
-        // Update Buttons Visual State
+        currentFilter = filter;
         const buttons = document.querySelectorAll('#user-filter-group button');
         buttons.forEach(btn => {
-            // Check if the button's text content (converted to lowercase) matches the filter
-            // or if the filter is 'all' and the button's text is 'All'
             if (btn.textContent.toLowerCase() === filter || (filter === 'all' && btn.textContent === 'All')) {
-                btn.className = 'btn btn-sm btn-primary';
+                btn.className = 'btn btn-sm btn-primary shadow';
             } else {
                 btn.className = 'btn btn-sm btn-ghost';
             }
@@ -146,36 +222,30 @@
 
         const list = document.getElementById('user-db-list');
         list.innerHTML = '';
-
         const filtered = filter === 'all' ? allUsers : allUsers.filter(u => u.role === filter);
 
         if (filtered.length === 0) {
-            list.innerHTML = '<p class="text-muted">No users found in this category.</p>';
+            list.innerHTML = '<p class="text-gray-400 p-2 italic">No users found.</p>';
             return;
         }
 
         filtered.forEach(u => {
             const div = document.createElement('div');
-            div.className = 'list-item';
+            div.className = 'list-item flex items-center gap-3 p-2 hover:bg-gray-50 rounded';
             div.innerHTML = `
-                <div style="display:flex; gap:1rem; align-items:center;">
-                    <div style="width:32px; height:32px; background:#e5e7eb; border-radius:50%; display:flex; align-items:center; justify-content:center; font-weight:bold;">
-                        ${u.name.charAt(0).toUpperCase()}
-                    </div>
-                    <div>
-                        <div style="font-weight:bold;">${u.name}</div>
-                        <div class="text-xs text-muted">${u.email} • ${u.phone || 'No Phone'}</div>
-                    </div>
+                <div class="h-8 w-8 bg-gray-200 rounded-full flex items-center justify-center font-bold text-gray-600">
+                    ${u.name.charAt(0).toUpperCase()}
                 </div>
-                <div>
-                    <span class="badge" style="background:${u.role === 'admin' ? '#FEF3C7' : '#E5E7EB'}">${u.role.toUpperCase()}</span>
+                <div class="flex-1">
+                    <div class="font-bold text-sm text-gray-800">${u.name}</div>
+                    <div class="text-xs text-gray-500">${u.email} • ${u.phone || 'No Phone'}</div>
                 </div>
+                <span class="text-xs uppercase font-bold tracking-wider text-gray-400">${u.role}</span>
             `;
             list.appendChild(div);
         });
     }
 
-    // Actions
     async function approve(id, status) {
         await fetch('/api/users/approve', {
             method: 'POST',
@@ -185,38 +255,66 @@
         loadData();
     }
 
+    // Handle File Upload and Add Bus
     async function addBus() {
-        const no = document.getElementById('new-bus-no');
-        const route = document.getElementById('new-bus-route');
-        const cap = document.getElementById('new-bus-cap');
+        const no = document.getElementById('new-bus-no').value;
+        const route = document.getElementById('new-bus-route').value;
+        const cap = document.getElementById('new-bus-cap').value;
+        const gmaps = document.getElementById('new-bus-gmaps').value;
+        const fileInput = document.getElementById('route-file');
 
-        if (!no.value || !route.value) {
-            alert("Please fill all bus details");
+        let coords = "[]";
+
+        if (fileInput.files.length > 0) {
+            const file = fileInput.files[0];
+            const text = await file.text();
+            // Parse Lat, Lon
+            const lines = text.split('\n');
+            const parsed = [];
+            lines.forEach(line => {
+                const parts = line.split(',');
+                if (parts.length >= 2) {
+                    const lat = parseFloat(parts[0].trim());
+                    const lon = parseFloat(parts[1].trim());
+                    if (!isNaN(lat) && !isNaN(lon)) {
+                        parsed.push([lat, lon]);
+                    }
+                }
+            });
+            coords = JSON.stringify(parsed);
+        }
+
+        if (!no || !route) {
+            alert("Please fill bus number and route");
             return;
         }
 
         const res = await fetch('/api/buses', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ number: no.value, route: route.value, capacity: cap.value })
+            body: JSON.stringify({
+                number: no,
+                route: route,
+                capacity: cap,
+                coords: coords,
+                gmaps: gmaps,
+                next_arrival: 'Pending' // Initial status
+            })
         });
 
         const data = await res.json();
         if (data.success) {
             // Clear inputs
-            no.value = '';
-            route.value = '';
-            cap.value = '40';
+            document.getElementById('new-bus-no').value = '';
+            document.getElementById('new-bus-route').value = '';
+            document.getElementById('route-file').value = '';
             loadData();
         } else {
-            alert("Failed to add bus (Duplicate number?)");
+            alert("Failed to add bus: " + (data.error || "Unknown error"));
         }
     }
 
-    // Auto-Refresh (Every 3 seconds)
-    setInterval(loadData, 3000);
-
-    // Initial Load
+    setInterval(loadData, 5000);
     loadData();
 </script>
 {% endblock %}

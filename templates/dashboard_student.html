@@ -10,13 +10,20 @@
 {% block content %}
 <div class="grid">
     <div class="card col-span-2">
-        <h3><i data-lucide="map"></i> Live Bus Map</h3>
+        <div class="flex justify-between items-center mb-2">
+            <h3><i data-lucide="map"></i> Live Bus Map</h3>
+            <button onclick="updateBuses()" class="btn btn-sm btn-ghost"><i data-lucide="refresh-cw"></i>
+                Refresh</button>
+        </div>
         <div id="map" style="height: 500px; width: 100%; border-radius: 0.5rem;"></div>
     </div>
 
     <div class="card">
-        <h3><i data-lucide="bus"></i> Active Buses</h3>
-        <div id="bus-list">Loading...</div>
+        <h3><i data-lucide="bus"></i> Find Your Bus</h3>
+        <input type="text" id="search-bar" placeholder="Search by Bus Number or Route..."
+            class="w-full mb-4 p-2 border rounded" onkeyup="filterBuses()">
+
+        <div id="bus-list" style="max-height: 400px; overflow-y: auto;">Loading...</div>
     </div>
 </div>
 {% endblock %}
@@ -27,39 +34,92 @@
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap' }).addTo(map);
 
     let markers = {};
+    let polylines = {};
+    let allBuses = [];
 
     async function updateBuses() {
-        const res = await fetch('/api/buses');
-        const buses = await res.json();
+        try {
+            const res = await fetch('/api/buses');
+            allBuses = await res.json();
+            renderBuses();
+        } catch (e) { console.error(e); }
+    }
+
+    function renderBuses() {
+        const query = document.getElementById('search-bar').value.toLowerCase();
         const list = document.getElementById('bus-list');
         list.innerHTML = '';
 
-        buses.forEach(bus => {
+        // Filter
+        const filtered = allBuses.filter(b =>
+            b.number.toLowerCase().includes(query) ||
+            b.route.toLowerCase().includes(query)
+        );
+
+        if (filtered.length === 0) {
+            list.innerHTML = '<p class="text-muted">No buses found.</p>';
+        }
+
+        filtered.forEach(bus => {
             // Update List
             const item = document.createElement('div');
             item.className = 'list-item';
+
+            const timingHTML = bus.next_arrival ? `<div class="text-xs text-primary font-bold mt-1">Expected: ${bus.next_arrival}</div>` : '';
+            const gmapsHTML = bus.gmaps ? `<a href="${bus.gmaps}" target="_blank" class="text-xs text-blue-500 hover:underline">Open in Maps</a>` : '';
+
             item.innerHTML = `
                 <div>
-                    <strong>Bus ${bus.number}</strong>
+                    <strong>${bus.number}</strong>
                     <div class="text-xs text-muted">${bus.route}</div>
+                    ${timingHTML}
                 </div>
-                <span class="badge ${bus.status === 'active' ? 'bg-green' : 'bg-gray'}">${bus.status}</span>
+                <div class="text-right flex flex-col items-end">
+                    <span class="badge ${bus.status === 'active' ? 'bg-green' : 'bg-gray'}">${bus.status}</span>
+                    ${gmapsHTML}
+                </div>
             `;
             list.appendChild(item);
 
-            // Update Map
+            // Update Map Markers & Routes
+            // Only show active buses OR buses matching search on map?
+            // User requirement: "hyperlink to bus in maps and ain map please make sure to mark the route"
+            // Showing all active is standard.
+
             if (bus.lat && bus.lon && bus.status === 'active') {
                 if (markers[bus.id]) {
                     markers[bus.id].setLatLng([bus.lat, bus.lon]);
                 } else {
                     markers[bus.id] = L.marker([bus.lat, bus.lon]).addTo(map)
-                        .bindPopup(`<b>${bus.number}</b>`);
+                        .bindPopup(`
+                            <b>${bus.number}</b><br>
+                            ${bus.route}<br>
+                            Next: ${bus.next_arrival || '--'}<br>
+                            ${bus.gmaps ? `<a href="${bus.gmaps}" target="_blank">Google Maps</a>` : ''}
+                        `);
                 }
+            } else if (markers[bus.id]) {
+                map.removeLayer(markers[bus.id]);
+                delete markers[bus.id];
+            }
+
+            // Route Lines
+            if (bus.coords) {
+                try {
+                    const latlngs = JSON.parse(bus.coords);
+                    if (!polylines[bus.id]) {
+                        polylines[bus.id] = L.polyline(latlngs, { color: 'blue', opacity: 0.6 }).addTo(map);
+                    }
+                } catch (e) { }
             }
         });
     }
 
-    setInterval(updateBuses, 3000);
+    function filterBuses() {
+        renderBuses();
+    }
+
+    setInterval(updateBuses, 5000);
     updateBuses();
 </script>
 {% endblock %}

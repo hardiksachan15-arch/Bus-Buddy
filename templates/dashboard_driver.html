@@ -2,6 +2,11 @@
 
 {% block title %}Driver Dashboard{% endblock %}
 
+{% block head %}
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+{% endblock %}
+
 {% block content %}
 <div class="grid">
     <div class="card">
@@ -15,15 +20,22 @@
             <button id="start-btn" class="btn btn-primary w-full mb-2">START TRIP</button>
             <button id="stop-btn" class="btn btn-danger w-full hidden">STOP TRIP</button>
             <div id="status-indicator" class="hidden text-center text-success font-bold mt-4">
-                ● LIVE TRACKING
+                ● LIVE TRACKING ACTIVE
             </div>
+            <div id="gps-status" class="text-xs text-center text-muted mt-2">Waiting for GPS...</div>
         </div>
     </div>
 
+    <!-- Live Map for Driver -->
     <div class="card">
+        <h3><i data-lucide="map-pin"></i> My Location</h3>
+        <div id="map" style="height: 300px; width: 100%; border-radius: 0.5rem;"></div>
+    </div>
+
+    <div class="card col-span-2" style="border-color: #ef4444;">
         <h3><i data-lucide="alert-triangle"></i> Emergency</h3>
-        <p class="text-muted mb-4">Click below to send immediate SOS to admin.</p>
-        <button class="btn btn-danger w-full py-4" style="font-size: 1.5rem;">SOS</button>
+        <p class="text-muted mb-4">Click below to send immediate SOS to admin/transport dept.</p>
+        <button id="sos-btn" class="btn btn-danger w-full py-4 text-2xl font-bold">SOS ALERT</button>
     </div>
 </div>
 {% endblock %}
@@ -32,6 +44,13 @@
 <script>
     let activeBusId = null;
     let watchId = null;
+    let currentLat = null;
+    let currentLon = null;
+
+    // Map Init
+    const map = L.map('map').setView([28.6139, 77.2090], 12);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap' }).addTo(map);
+    const myMarker = L.marker([0, 0]).addTo(map);
 
     async function loadBuses() {
         const res = await fetch('/api/buses');
@@ -39,6 +58,8 @@
         const select = document.getElementById('bus-select');
         select.innerHTML = '<option value="">-- Select --</option>';
         buses.forEach(b => {
+            // Only show inactive buses or buses assigned to this driver (if implemented)
+            // For simplicity, showing all.
             const opt = document.createElement('option');
             opt.value = b.id;
             opt.textContent = `${b.number} (${b.route})`;
@@ -52,6 +73,8 @@
 
     document.getElementById('start-btn').onclick = () => {
         activeBusId = document.getElementById('bus-select').value;
+        if (!activeBusId) return;
+
         document.getElementById('bus-select').disabled = true;
         document.getElementById('start-btn').classList.add('hidden');
         document.getElementById('stop-btn').classList.remove('hidden');
@@ -60,17 +83,30 @@
         // Start Tracking
         if (navigator.geolocation) {
             watchId = navigator.geolocation.watchPosition(pos => {
+                currentLat = pos.coords.latitude;
+                currentLon = pos.coords.longitude;
+
+                // Update specific map marker
+                myMarker.setLatLng([currentLat, currentLon]);
+                map.setView([currentLat, currentLon], 14);
+                document.getElementById('gps-status').textContent = `GPS: ${currentLat.toFixed(4)}, ${currentLon.toFixed(4)}`;
+
+                // Send to backend
                 fetch('/api/driver/update', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         bus_id: activeBusId,
                         status: 'active',
-                        lat: pos.coords.latitude,
-                        lon: pos.coords.longitude
+                        lat: currentLat,
+                        lon: currentLon
                     })
                 });
-            });
+            }, err => {
+                alert("GPS Error: " + err.message);
+            }, { enableHighAccuracy: true });
+        } else {
+            alert("Geolocation is not supported by your browser.");
         }
     };
 
@@ -83,6 +119,39 @@
         });
         window.location.reload();
     };
+
+    document.getElementById('sos-btn').onclick = async () => {
+        if (!activeBusId) {
+            if (!confirm("You are not in an active trip. Send SOS anyway?")) return;
+        }
+
+        // Get one-time location if not tracking
+        if (!currentLat) {
+            navigator.geolocation.getCurrentPosition(async (pos) => {
+                await sendSOS(pos.coords.latitude, pos.coords.longitude);
+            });
+        } else {
+            await sendSOS(currentLat, currentLon);
+        }
+    };
+
+    async function sendSOS(lat, lon) {
+        try {
+            const res = await fetch('/api/sos', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    bus_id: activeBusId,
+                    lat: lat,
+                    lon: lon
+                })
+            });
+            const data = await res.json();
+            if (data.success) alert("SOS SENT SUCCESSFULLY! ADMIN NOTIFIED.");
+        } catch (e) {
+            alert("FAILED TO SEND SOS: " + e);
+        }
+    }
 
     loadBuses();
 </script>

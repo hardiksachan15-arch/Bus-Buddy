@@ -4,6 +4,8 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import datetime
 import io
 import csv
+import json
+import math
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'your-secret-key-123'
@@ -11,6 +13,50 @@ app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///busbuddy.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 db = SQLAlchemy(app)
+
+# --- UTILS ---
+def haversine(lat1, lon1, lat2, lon2):
+    R = 6371  # Earth radius in km
+    dlat = math.radians(lat2 - lat1)
+    dlon = math.radians(lon2 - lon1)
+    a = math.sin(dlat/2) * math.sin(dlat/2) + \
+        math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) * \
+        math.sin(dlon/2) * math.sin(dlon/2)
+    c = 2 * math.atan2(math.sqrt(a), math.sqrt(1-a))
+    return R * c
+
+def calculate_eta(current_lat, current_lon, route_coords_json):
+    try:
+        route = json.loads(route_coords_json)
+        if not route or len(route) < 2: return "Unknown"
+        
+        # 1. Find nearest point index
+        min_dist = float('inf')
+        nearest_idx = 0
+        
+        for i, point in enumerate(route):
+            dist = haversine(current_lat, current_lon, point[0], point[1])
+            if dist < min_dist:
+                min_dist = dist
+                nearest_idx = i
+                
+        # 2. Calculate remaining distance from nearest_idx to end
+        remaining_km = 0
+        for i in range(nearest_idx, len(route) - 1):
+            remaining_km += haversine(route[i][0], route[i][1], route[i+1][0], route[i+1][1])
+            
+        # 3. Estimate Time (Avg speed 30 km/h)
+        speed_kmh = 30
+        hours = remaining_km / speed_kmh
+        minutes = int(hours * 60)
+        
+        if minutes < 1: return "Arriving Now"
+        if minutes > 60: return f"{int(minutes/60)} hr {minutes%60} min"
+        return f"{minutes} min"
+        
+    except Exception as e:
+        print(f"ETA Error: {e}")
+        return "Unknown"
 
 # --- MODELS ---
 class User(db.Model):
@@ -33,6 +79,19 @@ class Bus(db.Model):
     current_lon = db.Column(db.Float)
     last_update = db.Column(db.DateTime)
     driver_name = db.Column(db.String(100))
+    # New Fields
+    next_arrival_time = db.Column(db.String(50)) # e.g. "10:30 AM" or "15 min"
+    route_coordinates = db.Column(db.Text) # JSON string of coords
+    google_maps_link = db.Column(db.String(500))
+
+class SOSAlert(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    bus_id = db.Column(db.Integer, db.ForeignKey('bus.id'))
+    driver_name = db.Column(db.String(100))
+    lat = db.Column(db.Float)
+    lon = db.Column(db.Float)
+    timestamp = db.Column(db.DateTime, default=datetime.utcnow)
+    resolved = db.Column(db.Boolean, default=False)
 
 # --- ROUTES ---
 
@@ -142,7 +201,10 @@ def get_buses():
     return jsonify([{
         'id': b.id, 'number': b.bus_number, 'route': b.route_name, 
         'status': b.status, 'lat': b.current_lat, 'lon': b.current_lon,
-        'driver': b.driver_name
+        'driver': b.driver_name,
+        'next_arrival': b.next_arrival_time,
+        'coords': b.route_coordinates,
+        'gmaps': b.google_maps_link
     } for b in buses])
 
 @app.route('/api/buses', methods=['POST'])
@@ -150,7 +212,16 @@ def add_bus():
     if session.get('role') not in ['admin', 'transport_dept']: return "Unauthorized", 403
     try:
         data = request.json
-        new_bus = Bus(bus_number=data['number'], route_name=data['route'], capacity=data['capacity'])
+        # Format for route_coordinates should be stored as JSON string "[[lat,lon],...]"
+        
+        new_bus = Bus(
+            bus_number=data['number'], 
+            route_name=data['route'], 
+            capacity=data.get('capacity', 40),
+            next_arrival_time=data.get('next_arrival'),
+            route_coordinates=data.get('coords'),
+            google_maps_link=data.get('gmaps')
+        )
         db.session.add(new_bus)
         db.session.commit()
         return jsonify({'success': True})
@@ -175,10 +246,19 @@ def get_pending_users():
 
 @app.route('/api/users/approve', methods=['POST'])
 def approve_user():
-    if session.get('role') not in ['admin', 'transport_dept']: return "Unauthorized", 403
+    current_role = session.get('role')
+    if current_role not in ['admin', 'transport_dept']: return "Unauthorized", 403
+    
     data = request.json
     user = User.query.get(data['user_id'])
+    
     if user:
+        # Permission Logic
+        # Admin can approve anyone
+        # Transport Dept can only approve drivers
+        if current_role == 'transport_dept' and user.role != 'driver':
+            return "Unauthorized Approval", 403
+            
         if data['approved']:
             user.approved = True
         else:
@@ -193,17 +273,55 @@ def driver_update():
     bus = Bus.query.get(data['bus_id'])
     if bus:
         bus.status = data['status']
-        if 'lat' in data: bus.current_lat = data['lat']
-        if 'lon' in data: bus.current_lon = data['lon']
         
+        if 'lat' in data and 'lon' in data: 
+            bus.current_lat = data['lat']
+            bus.current_lon = data['lon']
+            
+            # Recalculate ETA if route exists
+            if bus.route_coordinates:
+                bus.next_arrival_time = calculate_eta(data['lat'], data['lon'], bus.route_coordinates)
+
         if data['status'] == 'active':
             bus.driver_name = session.get('name')
         elif data['status'] == 'inactive':
             bus.driver_name = None
+            bus.next_arrival_time = None # Reset ETA
             
         bus.last_update = datetime.utcnow()
         db.session.commit()
     return jsonify({'success': True})
+
+# --- SOS ROUTES ---
+@app.route('/api/sos', methods=['POST'])
+def trigger_sos():
+    if session.get('role') not in ['driver', 'student']: return "Unauthorized", 403 # Allowing students too per request logic? "Make sure both admin and transport have access" -> Access to VIEW. "Map in driver... Sos button". Usually drivers SOS. User said "Sos button(make sure bith admin and transport have acess)". This likely means they receive it.
+    
+    data = request.json
+    # Basic logic: Create alert
+    alert = SOSAlert(
+        bus_id=data.get('bus_id'),
+        driver_name=session.get('name'),
+        lat=data.get('lat'),
+        lon=data.get('lon')
+    )
+    db.session.add(alert)
+    db.session.commit()
+    return jsonify({'success': True})
+
+@app.route('/api/sos/history', methods=['GET'])
+def get_sos_history():
+    if session.get('role') not in ['admin', 'transport_dept']: return "Unauthorized", 403
+    
+    alerts = SOSAlert.query.order_by(SOSAlert.timestamp.desc()).all()
+    return jsonify([{
+        'id': a.id,
+        'driver': a.driver_name,
+        'time': a.timestamp.strftime('%Y-%m-%d %H:%M:%S'),
+        'lat': a.lat,
+        'lon': a.lon,
+        'resolved': a.resolved
+    } for a in alerts])
 
 @app.route('/api/export/csv')
 def export_csv():
