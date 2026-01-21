@@ -107,7 +107,18 @@ def index():
 # --- INIT DB & SEED DATA ---
 def init_db_data():
     with app.app_context():
-        db.create_all()
+        # Try to access the DB to check for schema validity
+        try:
+            # Inspection query - will fail if columns are missing
+            db.create_all()
+            if Bus.query.first() is not None: pass 
+            if User.query.first() is not None: pass
+        except Exception as e:
+            print(f"⚠️ Schema mismatch detected ({e}). Resetting Database...")
+            db.session.rollback()
+            db.drop_all()
+            db.create_all()
+            print("✅ Database reset complete.")
         
         # 1. Restore Admin if missing
         if not User.query.filter_by(email='work.694206969@gmail.com').first():
@@ -138,7 +149,7 @@ def init_db_data():
                     {"name": "Vishwavidyalaya", "lat": 28.6945, "lon": 77.1230},
                     {"name": "Civil Lines", "lat": 28.6845, "lon": 77.1430}
                 ]),
-                google_maps_link=""
+                google_maps_link="" # fixed empty string
             )
             db.session.add(bus)
             
