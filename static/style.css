@@ -30,6 +30,39 @@
     --radius-lg: 24px;
 }
 
+/* --- DRIVER COCKPIT THEME --- */
+.driver-mode {
+    --bg-gradient: linear-gradient(135deg, #0F172A 0%, #1E293B 100%);
+    --text-main: #F8FAFC;
+    --text-muted: #94A3B8;
+    --glass-bg: rgba(30, 41, 59, 0.7);
+    --glass-border: rgba(255, 255, 255, 0.1);
+    --glass-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.5);
+    color: white;
+}
+
+.driver-mode .card {
+    background: rgba(15, 23, 42, 0.85);
+}
+
+.driver-mode .navbar {
+    background: rgba(15, 23, 42, 0.9);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.driver-mode input,
+.driver-mode select {
+    background: rgba(255, 255, 255, 0.1);
+    color: white;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.driver-mode option {
+    background: #1E293B;
+    color: white;
+}
+
+
 * {
     box-sizing: border-box;
     margin: 0;
@@ -318,4 +351,139 @@ select:focus {
     justify-content: center;
     height: 100%;
     min-height: 400px;
+}
+
+/* --- DRIVER HUD & CONTROLS --- */
+.cockpit-grid {
+    display: grid;
+    grid-template-columns: 350px 1fr;
+    gap: 1.5rem;
+    height: calc(100vh - 100px);
+}
+
+@media (max-width: 1024px) {
+    .cockpit-grid {
+        grid-template-columns: 1fr;
+        height: auto;
+    }
+}
+
+.hud-stat {
+    background: rgba(0, 0, 0, 0.3);
+    padding: 1rem;
+    border-radius: var(--radius-sm);
+    text-align: center;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.hud-value {
+    font-size: 1.5rem;
+    font-weight: 800;
+    color: var(--success);
+}
+
+.hud-label {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    text-transform: uppercase;
+}
+
+/* Large Toggle Switch */
+.toggle-switch {
+    position: relative;
+    display: inline-block;
+    width: 100%;
+    height: 60px;
+    margin-bottom: 1rem;
+}
+
+.toggle-switch input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+.slider {
+    position: absolute;
+    cursor: pointer;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: #334155;
+    transition: .4s;
+    border-radius: 34px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 800;
+    color: #94A3B8;
+    text-transform: uppercase;
+}
+
+.slider:before {
+    position: absolute;
+    content: "";
+    height: 52px;
+    width: 52px;
+    left: 4px;
+    bottom: 4px;
+    background-color: white;
+    transition: .4s;
+    border-radius: 50%;
+}
+
+input:checked+.slider {
+    background-color: var(--success);
+    color: white;
+}
+
+input:checked+.slider:before {
+    transform: translateX(calc(100% - 10px));
+    left: auto;
+    right: 4px;
+}
+
+input:checked+.slider:after {
+    content: "ONLINE";
+}
+
+input:not(:checked)+.slider:after {
+    content: "OFFLINE";
+}
+
+/* SOS Slider */
+.sos-container {
+    padding: 2rem;
+    background: rgba(239, 68, 68, 0.1);
+    border: 1px solid var(--danger);
+    border-radius: var(--radius-md);
+    text-align: center;
+}
+
+.sos-btn-lg {
+    width: 100%;
+    height: 80px;
+    font-size: 1.5rem;
+    font-weight: 900;
+    letter-spacing: 2px;
+    box-shadow: 0 0 20px rgba(239, 68, 68, 0.4);
+    animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+    0% {
+        transform: scale(1);
+        box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7);
+    }
+
+    70% {
+        transform: scale(1.02);
+        box-shadow: 0 0 0 10px rgba(239, 68, 68, 0);
+    }
+
+    100% {
+        transform: scale(1);
+        box-shadow: 0 0 0 0 rgba(239, 68, 68, 0);
+    }
 }

@@ -1,156 +1,244 @@
 {% extends "base.html" %}
 
-{% block title %}Driver Dashboard{% endblock %}
+{% block title %}Driver Cockpit{% endblock %}
 
 {% block head %}
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/lucide@latest"></script>
 {% endblock %}
 
 {% block content %}
-<div class="grid">
-    <div class="card">
-        <h3><i data-lucide="steering-wheel"></i> Drive Mode</h3>
+<!-- Force Dark Mode for this page -->
+<script>document.body.classList.add('driver-mode');</script>
+
+<div class="container cockpit-grid" style="max-width: 100%; padding: 1rem;">
+
+    <!-- LEFT PANEL: CONTROLS -->
+    <div class="card flex flex-col gap-4" style="height: fit-content;">
+        <div class="flex items-center gap-2 mb-2">
+            <i data-lucide="steering-wheel" class="text-primary-light" size="32"></i>
+            <h2 class="text-xl font-bold">Trip Controls</h2>
+        </div>
+
+        <!-- 1. Bus Selection -->
         <div class="form-group">
-            <label>Select Bus</label>
-            <select id="bus-select"></select>
+            <label class="text-xs text-muted uppercase font-bold">Active Vehicle</label>
+            <select id="bus-select" class="text-lg">
+                <!-- Loaded via JS -->
+            </select>
         </div>
 
-        <div id="controls" class="hidden">
-            <button id="start-btn" class="btn btn-primary w-full mb-2">START TRIP</button>
-            <button id="stop-btn" class="btn btn-danger w-full hidden">STOP TRIP</button>
-            <div id="status-indicator" class="hidden text-center text-success font-bold mt-4">
-                ● LIVE TRACKING ACTIVE
+        <!-- 2. Master Toggle -->
+        <div id="controls" class="hidden transition-all">
+            <label class="toggle-switch">
+                <input type="checkbox" id="master-toggle">
+                <span class="slider"></span>
+            </label>
+
+            <!-- HUD Stats -->
+            <div class="grid grid-cols-2 gap-2 mt-4">
+                <div class="hud-stat">
+                    <div id="status-text" class="hud-value" style="font-size: 1rem;">READY</div>
+                    <div class="hud-label">STATUS</div>
+                </div>
+                <div class="hud-stat">
+                    <div id="gps-accuracy" class="hud-value" style="font-size: 1rem;">--</div>
+                    <div class="hud-label">GPS (M)</div>
+                </div>
             </div>
-            <div id="gps-status" class="text-xs text-center text-muted mt-2">Waiting for GPS...</div>
+
+            <div id="gps-coords" class="text-xs text-center text-muted mt-4 font-mono">
+                Waiting for satellite lock...
+            </div>
+        </div>
+
+        <!-- 3. SOS (Always visible but guarded) -->
+        <div class="mt-auto pt-8">
+            <div class="sos-container">
+                <button id="sos-btn" class="btn btn-danger sos-btn-lg">
+                    <i data-lucide="alert-triangle"></i> SOS ALERT
+                </button>
+                <p class="text-xs text-danger mt-2 font-bold opacity-75">DOUBLE TAP TO TRIGGER</p>
+            </div>
         </div>
     </div>
 
-    <!-- Live Map for Driver -->
-    <div class="card">
-        <h3><i data-lucide="map-pin"></i> My Location</h3>
-        <div id="map" style="height: 300px; width: 100%; border-radius: 0.5rem;"></div>
+    <!-- RIGHT PANEL: MAP -->
+    <div class="card" style="padding: 0; overflow: hidden; position: relative; min-height: 500px;">
+        <!-- Refresh Button Overlay -->
+        <button id="refresh-map-btn" class="btn btn-primary"
+            style="position: absolute; top: 1rem; right: 1rem; z-index: 1000; box-shadow: 0 4px 10px rgba(0,0,0,0.5);">
+            <i data-lucide="refresh-cw"></i> Refresh Map
+        </button>
+
+        <div id="map" style="height: 100%; width: 100%;"></div>
     </div>
 
-    <div class="card col-span-2" style="border-color: #ef4444;">
-        <h3><i data-lucide="alert-triangle"></i> Emergency</h3>
-        <p class="text-muted mb-4">Click below to send immediate SOS to admin/transport dept.</p>
-        <button id="sos-btn" class="btn btn-danger w-full py-4 text-2xl font-bold">SOS ALERT</button>
-    </div>
 </div>
+
+<!-- Audio for SOS -->
+<audio id="sos-sound" src="https://assets.mixkit.co/sfx/preview/mixkit-alarm-digital-clock-beep-989.mp3"></audio>
+
 {% endblock %}
 
 {% block scripts %}
 <script>
+    lucide.createIcons();
+
     let activeBusId = null;
     let watchId = null;
     let currentLat = null;
     let currentLon = null;
+    let isTracked = false;
 
     // Map Init
-    const map = L.map('map').setView([28.6139, 77.2090], 12);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap' }).addTo(map);
+    const map = L.map('map').setView([28.6139, 77.2090], 13);
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+        attribution: '© OpenStreetMap © CARTO'
+    }).addTo(map);
     const myMarker = L.marker([0, 0]).addTo(map);
 
+    // Load Buses
     async function loadBuses() {
         const res = await fetch('/api/buses');
         const buses = await res.json();
         const select = document.getElementById('bus-select');
-        select.innerHTML = '<option value="">-- Select --</option>';
+        select.innerHTML = '<option value="">-- Select Bus to Start --</option>';
         buses.forEach(b => {
-            // Only show inactive buses or buses assigned to this driver (if implemented)
-            // For simplicity, showing all.
             const opt = document.createElement('option');
             opt.value = b.id;
-            opt.textContent = `${b.number} (${b.route})`;
+            opt.textContent = `${b.number} - ${b.route}`;
             select.appendChild(opt);
         });
     }
 
+    // Bus Select Logic
     document.getElementById('bus-select').onchange = (e) => {
-        if (e.target.value) document.getElementById('controls').classList.remove('hidden');
-    };
-
-    document.getElementById('start-btn').onclick = () => {
-        activeBusId = document.getElementById('bus-select').value;
-        if (!activeBusId) return;
-
-        document.getElementById('bus-select').disabled = true;
-        document.getElementById('start-btn').classList.add('hidden');
-        document.getElementById('stop-btn').classList.remove('hidden');
-        document.getElementById('status-indicator').classList.remove('hidden');
-
-        // Start Tracking
-        if (navigator.geolocation) {
-            watchId = navigator.geolocation.watchPosition(pos => {
-                currentLat = pos.coords.latitude;
-                currentLon = pos.coords.longitude;
-
-                // Update specific map marker
-                myMarker.setLatLng([currentLat, currentLon]);
-                map.setView([currentLat, currentLon], 14);
-                document.getElementById('gps-status').textContent = `GPS: ${currentLat.toFixed(4)}, ${currentLon.toFixed(4)}`;
-
-                // Send to backend
-                fetch('/api/driver/update', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        bus_id: activeBusId,
-                        status: 'active',
-                        lat: currentLat,
-                        lon: currentLon
-                    })
-                });
-            }, err => {
-                alert("GPS Error: " + err.message);
-            }, { enableHighAccuracy: true });
+        activeBusId = e.target.value;
+        if (activeBusId) {
+            document.getElementById('controls').classList.remove('hidden');
         } else {
-            alert("Geolocation is not supported by your browser.");
+            document.getElementById('controls').classList.add('hidden');
         }
     };
 
-    document.getElementById('stop-btn').onclick = () => {
+    // Master Toggle Logic
+    document.getElementById('master-toggle').addEventListener('change', function (e) {
+        if (this.checked) {
+            startTracking();
+        } else {
+            stopTracking();
+        }
+    });
+
+    function startTracking() {
+        isTracked = true;
+        document.getElementById('bus-select').disabled = true;
+        document.getElementById('status-text').textContent = "LIVE";
+        document.getElementById('status-text').style.color = "#10B981"; // Success Green
+
+        if (navigator.geolocation) {
+            watchId = navigator.geolocation.watchPosition(updatePosition, handleError, {
+                enableHighAccuracy: true
+            });
+        } else {
+            alert("GPS not supported");
+        }
+    }
+
+    function stopTracking() {
+        isTracked = false;
         if (watchId) navigator.geolocation.clearWatch(watchId);
+        document.getElementById('bus-select').disabled = false;
+        document.getElementById('status-text').textContent = "OFFLINE";
+        document.getElementById('status-text').style.color = "#94A3B8"; // Muted
+
+        // Notify backend of offline status
+        if (activeBusId) {
+            fetch('/api/driver/update', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ bus_id: activeBusId, status: 'inactive' })
+            });
+        }
+    }
+
+    function updatePosition(pos) {
+        currentLat = pos.coords.latitude;
+        currentLon = pos.coords.longitude;
+        const acc = pos.coords.accuracy;
+
+        // Update UI
+        document.getElementById('gps-accuracy').textContent = Math.round(acc);
+        document.getElementById('gps-coords').textContent = `${currentLat.toFixed(5)}, ${currentLon.toFixed(5)}`;
+
+        // Update Map
+        myMarker.setLatLng([currentLat, currentLon]);
+        map.setView([currentLat, currentLon], 15); // Auto-follow
+
+        // Send to Backend
         fetch('/api/driver/update', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ bus_id: activeBusId, status: 'inactive' })
+            body: JSON.stringify({
+                bus_id: activeBusId,
+                status: 'active',
+                lat: currentLat,
+                lon: currentLon
+            })
         });
-        window.location.reload();
+    }
+
+    function handleError(err) {
+        document.getElementById('gps-coords').textContent = "GPS Lost: " + err.message;
+    }
+
+    // Refresh Map Button
+    document.getElementById('refresh-map-btn').onclick = () => {
+        map.invalidateSize();
+        if (currentLat && currentLon) map.setView([currentLat, currentLon], 15);
+        alert("Map Refreshed"); // Visual feedback
     };
 
-    document.getElementById('sos-btn').onclick = async () => {
-        if (!activeBusId) {
-            if (!confirm("You are not in an active trip. Send SOS anyway?")) return;
-        }
-
-        // Get one-time location if not tracking
-        if (!currentLat) {
-            navigator.geolocation.getCurrentPosition(async (pos) => {
-                await sendSOS(pos.coords.latitude, pos.coords.longitude);
-            });
+    // SOS Logic (Double Click for safety)
+    let lastClick = 0;
+    document.getElementById('sos-btn').onclick = async (e) => {
+        const now = new Date().getTime();
+        if (now - lastClick < 500) {
+            // Valid Double Click
+            confirmedSOS();
         } else {
-            await sendSOS(currentLat, currentLon);
+            // First Click
+            e.target.innerHTML = '<i data-lucide="alert-triangle"></i> TAP AGAIN!';
+            setTimeout(() => {
+                e.target.innerHTML = '<i data-lucide="alert-triangle"></i> SOS ALERT';
+            }, 1000);
         }
+        lastClick = now;
     };
+
+    async function confirmedSOS() {
+        if (!activeBusId && !confirm("No bus selected. Send emergency alert anyway?")) return;
+
+        try {
+            document.getElementById('sos-sound').play();
+            // Get quick location if not tracking
+            if (!currentLat) {
+                navigator.geolocation.getCurrentPosition(p => sendSOS(p.coords.latitude, p.coords.longitude));
+            } else {
+                sendSOS(currentLat, currentLon);
+            }
+        } catch (e) { alert("Error: " + e); }
+    }
 
     async function sendSOS(lat, lon) {
-        try {
-            const res = await fetch('/api/sos', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    bus_id: activeBusId,
-                    lat: lat,
-                    lon: lon
-                })
-            });
-            const data = await res.json();
-            if (data.success) alert("SOS SENT SUCCESSFULLY! ADMIN NOTIFIED.");
-        } catch (e) {
-            alert("FAILED TO SEND SOS: " + e);
-        }
+        const res = await fetch('/api/sos', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ bus_id: activeBusId, lat, lon })
+        });
+        if (res.ok) alert("🚨 EMERGENCY SOS SENT! HELP IS ON THE WAY.");
     }
 
     loadBuses();
