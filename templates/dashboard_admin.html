@@ -5,6 +5,44 @@
 {% block head %}
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+    .tab-btn {
+        padding: 10px 20px;
+        cursor: pointer;
+        border-bottom: 3px solid transparent;
+        color: var(--text-muted);
+        font-weight: 500;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+
+    .tab-btn.active {
+        border-bottom-color: var(--primary);
+        color: var(--primary);
+    }
+
+    .tab-content {
+        display: none;
+        animation: fadeIn 0.3s ease;
+    }
+
+    .tab-content.active {
+        display: block;
+    }
+
+    @keyframes fadeIn {
+        from {
+            opacity: 0;
+            transform: translateY(5px);
+        }
+
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+</style>
 {% endblock %}
 
 {% block content %}
@@ -39,73 +77,102 @@
     </div>
 </div>
 
-<div class="grid">
-    <!-- Map Section -->
-    <div class="card col-span-2">
-        <div class="flex justify-between items-center mb-2">
-            <h3><i data-lucide="map"></i> Live Fleet Overview</h3>
-            <div class="flex gap-2">
-                <button class="btn btn-sm btn-ghost" onclick="map.invalidateSize(); alert('Map Refreshed');">
-                    <i data-lucide="refresh-cw" width="14"></i> Refresh
-                </button>
-                <span class="badge bg-green">Live Updates On</span>
+<!-- Tabs Navigation -->
+<div class="card"
+    style="padding: 0; margin-bottom: 1.5rem; display: flex; gap: 1rem; border-bottom: 1px solid #eee; overflow: hidden;">
+    <div class="tab-btn active" onclick="switchTab('overview')"><i data-lucide="layout-dashboard" width="16"></i>
+        Overview</div>
+    <div class="tab-btn" onclick="switchTab('users')"><i data-lucide="users" width="16"></i> User Management</div>
+    <div class="tab-btn" onclick="switchTab('transport')"><i data-lucide="shield" width="16"></i> Transport Dept</div>
+    <div class="tab-btn" onclick="switchTab('fleet')"><i data-lucide="bus" width="16"></i> Fleet Status</div>
+</div>
+
+<!-- TAB: OVERVIEW -->
+<div id="overview" class="tab-content active px-2">
+    <div class="grid" style="grid-template-columns: 2fr 1fr; gap: 1.5rem;">
+        <!-- Map Section -->
+        <div class="card mb-0">
+            <div class="flex justify-between items-center mb-2">
+                <h3><i data-lucide="map"></i> Live Fleet Overview</h3>
+                <div class="flex gap-2">
+                    <button class="btn btn-sm btn-ghost" onclick="map.invalidateSize();"> <!-- Removed Alert -->
+                        <i data-lucide="refresh-cw" width="14"></i>
+                    </button>
+                    <span class="badge bg-green">Live Updates On</span>
+                </div>
             </div>
+            <div id="map" style="height: 450px; width: 100%; border-radius: var(--radius-sm);"></div>
         </div>
-        <div id="map" style="height: 450px; width: 100%;"></div>
+
+        <!-- SOS & Alerts -->
+        <div class="card mb-0 bg-red-50 border-danger">
+            <h3 class="text-danger"><i data-lucide="alert-octagon"></i> Recent SOS Alerts</h3>
+            <div id="sos-list" style="max-height: 400px; overflow-y: auto;"></div>
+        </div>
     </div>
+</div>
 
-    <!-- Bus & Bulk Management -->
+<!-- TAB: USERS -->
+<div id="users" class="tab-content px-2">
     <div class="card">
-        <h3><i data-lucide="plus-circle"></i> Add New Bus</h3>
-
-        <!-- Standard Add -->
-        <div class="form-group bg-gray p-4 rounded-lg mb-4">
-            <h5 class="text-xs font-bold text-muted uppercase mb-2">Single Entry</h5>
-            <input type="text" id="new-bus-no" placeholder="Bus Number (e.g. DL-1C-0001)">
-            <input type="text" id="new-bus-route" placeholder="Route Name">
-            <input type="text" id="new-bus-driver" placeholder="Driver Name (Optional)">
-            <button onclick="addBus()" class="btn btn-primary w-full mt-2">Add Bus</button>
+        <div class="flex justify-between items-center mb-4">
+            <h3>All Registered Users</h3>
+            <a href="/api/export/csv" class="btn btn-sm btn-secondary"><i data-lucide="download"></i> Export CSV</a>
+        </div>
+        <div class="overflow-x-auto">
+            <table class="w-full text-sm text-left">
+                <thead class="bg-gray text-muted uppercase font-bold">
+                    <tr>
+                        <th class="p-3">Name</th>
+                        <th class="p-3">Email</th>
+                        <th class="p-3">Role</th>
+                        <th class="p-3">Status</th>
+                    </tr>
+                </thead>
+                <tbody id="users-table-body">
+                    <!-- Populated via JS -->
+                </tbody>
+            </table>
         </div>
 
-        <!-- Bulk Upload -->
-        <div class="form-group bg-gray p-4 rounded-lg">
-            <h5 class="text-xs font-bold text-muted uppercase mb-2">Bulk Upload (CSV)</h5>
-            <div class="text-xs text-muted mb-2">fmt: Number, Route, Driver</div>
-            <input type="file" id="bulk-csv" accept=".csv" style="padding: 0.5rem; background: white; width: 100%;">
-            <button onclick="uploadBulk()" class="btn btn-secondary w-full mt-2">
-                <i data-lucide="upload"></i> Upload Fleet
+        <h3 class="mt-8 mb-4">Pending Approvals</h3>
+        <div id="pending-list" class="grid grid-cols-2 gap-2"></div>
+    </div>
+</div>
+
+<!-- TAB: TRANSPORT DEPT -->
+<div id="transport" class="tab-content px-2">
+    <div class="card" style="max-width: 800px; margin: 0 auto;">
+        <div class="flex justify-between items-center mb-4">
+            <h3>Transport Department Officers</h3>
+            <button onclick="document.getElementById('transport-modal').classList.remove('hidden')"
+                class="btn btn-primary">
+                <i data-lucide="user-plus"></i> Add Officer
             </button>
         </div>
-
-        <h4 class="mt-4 mb-2 text-muted uppercase text-xs font-bold">Current Fleet</h4>
-        <div id="bus-list" style="max-height: 250px; overflow-y: auto;"></div>
+        <div id="transport-list" class="grid gap-2"></div>
     </div>
+</div>
 
-    <!-- SOS & Transport Management -->
+<!-- TAB: FLEET -->
+<div id="fleet" class="tab-content px-2">
     <div class="card">
-        <h3 class="text-danger"><i data-lucide="alert-octagon"></i> SOS Alerts</h3>
-        <div id="sos-list" style="max-height: 150px; overflow-y: auto; margin-bottom: 2rem;"></div>
+        <div class="flex justify-between items-center mb-4">
+            <h3>Fleet Status</h3>
+            <div class="text-xs text-muted">Note: Bus Management is handled by Transport Dept.</div>
+        </div>
+        <div id="bus-grid" class="grid grid-cols-2 gap-4">
+            <!-- Populated via JS -->
+        </div>
 
-        <h3><i data-lucide="shield"></i> Transport Dept</h3>
-        <button onclick="document.getElementById('transport-modal').classList.remove('hidden')"
-            class="btn btn-primary w-full mb-2">
-            <i data-lucide="user-plus"></i> Add Officer
-        </button>
-        <div id="transport-list" style="max-height: 150px; overflow-y: auto;"></div>
-    </div>
-
-    <!-- Approvals & Schedules -->
-    <div class="card">
-        <h3><i data-lucide="users"></i> Confirm Users</h3>
-        <div id="pending-list" style="max-height: 150px; overflow-y: auto; margin-bottom: 2rem;"></div>
-
-        <h3><i data-lucide="calendar"></i> Schedules</h3>
-        <button onclick="openScheduleManager()" class="btn btn-ghost w-full mb-2">
-            Manage Timetables
+        <h3 class="mt-8 mb-4"><i data-lucide="calendar"></i> Schedules</h3>
+        <button onclick="openScheduleManager()" class="btn btn-ghost mb-4">
+            View / Manage Timetables
         </button>
     </div>
 </div>
 
+<!-- MODALS -->
 <!-- Transport Modal -->
 <div id="transport-modal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
     <div class="card" style="width: 400px; max-width: 90%;">
@@ -138,13 +205,11 @@
         </div>
 
         <div class="flex-1 overflow-y-auto border rounded p-2 bg-gray mb-4" id="sched-rows" style="min-height: 200px;">
-            <!-- Dynamic Rows -->
             <p class="text-xs text-muted text-center mt-4">Select a bus to view/edit schedule.</p>
         </div>
 
-        <button onclick="addSchedRow()" class="btn btn-sm btn-secondary mb-4 w-full dashed-border">
-            + Add Stop Row
-        </button>
+        <button onclick="addSchedRow()" class="btn btn-sm btn-secondary mb-4 w-full dashed-border">+ Add Stop
+            Row</button>
 
         <div class="flex gap-2">
             <button onclick="saveSchedule()" class="btn btn-primary flex-1">Save Timetable</button>
@@ -156,13 +221,24 @@
 
 {% block scripts %}
 <script>
+    // --- TABS LOGIC ---
+    function switchTab(tabId) {
+        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+        document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+
+        event.currentTarget.classList.add('active');
+        document.getElementById(tabId).classList.add('active');
+
+        if (tabId === 'overview') setTimeout(() => map.invalidateSize(), 100);
+    }
+
+    // --- MAP & DATA LOGIC ---
     const map = L.map('map').setView([28.6139, 77.2090], 12);
     L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
         attribution: '&copy; OpenStreetMap'
     }).addTo(map);
 
     let markers = {};
-    let polylines = {};
 
     async function loadData() {
         try {
@@ -174,40 +250,28 @@
             document.getElementById('stat-total').innerText = buses.length;
             document.getElementById('stat-active').innerText = buses.filter(b => b.status === 'active').length;
 
-            const busList = document.getElementById('bus-list');
-            busList.innerHTML = '';
-
+            // Bus Grid (Flagship Tab)
+            const busGrid = document.getElementById('bus-grid');
+            busGrid.innerHTML = '';
             buses.forEach(b => {
-                // Map
+                // Map Logic
                 if (b.lat && b.lon && b.status === 'active') {
                     if (markers[b.id]) markers[b.id].setLatLng([b.lat, b.lon]);
-                    else markers[b.id] = L.marker([b.lat, b.lon]).addTo(map)
-                        .bindPopup(`<b>${b.number}</b>`)
-                        .on('click', () => focusBus(b.lat, b.lon));
-                }
+                    else markers[b.id] = L.marker([b.lat, b.lon]).addTo(map).bindPopup(`<b>${b.number}</b>`);
+                } else if (markers[b.id]) { map.removeLayer(markers[b.id]); delete markers[b.id]; }
 
-                // List
+                // Grid Logic
                 const div = document.createElement('div');
-                div.className = 'list-item';
-                // Click to zoom
-                div.style.cursor = 'pointer';
-                div.onclick = () => { if (b.lat) focusBus(b.lat, b.lon); };
-
+                div.className = 'list-item p-3 border rounded bg-gray-50';
                 div.innerHTML = `
-                    <div>
+                    <div class="flex justify-between items-center">
                         <strong>${b.number}</strong>
-                        <div class="text-xs text-muted">${b.route}</div>
+                        <span class="badge ${b.status === 'active' ? 'bg-green' : 'bg-gray'}">${b.status}</span>
                     </div>
-                    <span class="badge ${b.status === 'active' ? 'bg-green' : 'bg-gray'}">${b.status}</span>
+                    <div class="text-xs text-muted mt-1">${b.route}</div>
+                    <div class="text-xs mt-2 font-mono">${b.driver || 'No Driver'}</div>
                 `;
-                busList.appendChild(div);
-
-                if (b.coords) {
-                    try {
-                        const latlngs = JSON.parse(b.coords);
-                        if (!polylines[b.id]) polylines[b.id] = L.polyline(latlngs, { color: '#6366f1' }).addTo(map);
-                    } catch (e) { }
-                }
+                busGrid.appendChild(div);
             });
 
             // 2. SOS
@@ -217,38 +281,60 @@
 
             const sosList = document.getElementById('sos-list');
             sosList.innerHTML = alerts.length ? '' : '<p class="text-xs text-muted">No alerts.</p>';
-            alerts.slice(0, 5).forEach(a => {
+            alerts.slice(0, 10).forEach(a => {
                 const div = document.createElement('div');
                 div.className = 'list-item';
-                div.style.background = '#FEF2F2';
+                div.style.background = '#fff';
                 div.innerHTML = `
-                    <div class="text-danger flex items-center gap-2 font-bold text-sm">
-                        <i data-lucide="alert-circle" width="14"></i> ${a.driver}
+                    <div>
+                        <div class="text-danger flex items-center gap-2 font-bold text-sm">
+                            <i data-lucide="alert-circle" width="14"></i> ${a.driver}
+                        </div>
+                        <div class="text-xs font-bold text-danger mt-1">Reason: ${a.reason || 'Emergency'}</div>
+                        <div class="text-xs text-muted">${a.time}</div>
                     </div>
                     <a href="https://maps.google.com/?q=${a.lat},${a.lon}" target="_blank" class="text-xs btn btn-sm btn-ghost">Map</a>
                 `;
                 sosList.appendChild(div);
             });
 
-            // 3. Approvals
-            const resUsers = await fetch('/api/users/pending');
-            const users = await resUsers.json();
+            // 3. User Approvals
+            const resPending = await fetch('/api/users/pending');
+            const pending = await resPending.json();
             const pendingList = document.getElementById('pending-list');
-            pendingList.innerHTML = users.length ? '' : '<p class="text-xs text-muted">No pending approvals.</p>';
+            pendingList.innerHTML = pending.length ? '' : '<p class="text-xs text-muted col-span-2">No pending approvals.</p>';
 
-            users.forEach(u => {
+            pending.forEach(u => {
                 const div = document.createElement('div');
                 div.className = 'list-item';
                 div.innerHTML = `
-                    <div>
-                        <strong>${u.name}</strong> <span class="text-xs text-muted">(${u.role})</span>
-                    </div>
+                    <div><strong>${u.name}</strong> <span class="text-xs text-muted">(${u.role})</span></div>
                     <div class="flex gap-1">
                         <button onclick="approve(${u.id}, true)" class="btn btn-sm btn-success">✓</button>
                         <button onclick="approve(${u.id}, false)" class="btn btn-sm btn-danger">✗</button>
                     </div>
                 `;
                 pendingList.appendChild(div);
+            });
+
+            // 4. All Users Table
+            // Only fetch if "Users" tab is active or first load to simple-populate? 
+            // Better: fetch always for simplicity in this prototype.
+            const resAll = await fetch('/api/users/all');
+            const allUsers = await resAll.json();
+            const tableBody = document.getElementById('users-table-body');
+            tableBody.innerHTML = '';
+
+            allUsers.forEach(u => {
+                const tr = document.createElement('tr');
+                tr.className = 'border-b';
+                tr.innerHTML = `
+                    <td class="p-3 font-bold">${u.name}</td>
+                    <td class="p-3 text-muted">${u.email}</td>
+                    <td class="p-3"><span class="badge bg-gray">${u.role}</span></td>
+                    <td class="p-3"><span class="badge ${u.approved ? 'bg-green' : 'bg-red'}">${u.approved ? 'Active' : 'Pending'}</span></td>
+                `;
+                tableBody.appendChild(tr);
             });
 
             lucide.createIcons();
@@ -265,63 +351,7 @@
         loadData();
     }
 
-    async function addBus() {
-        const no = document.getElementById('new-bus-no').value;
-        const route = document.getElementById('new-bus-route').value;
-        const driver = document.getElementById('new-bus-driver').value;
-
-        if (!no || !route) return alert("Fill details (Number & Route required)");
-
-        await fetch('/api/buses', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ bus_number: no, route_name: route, driver_name: driver, route_coords: "[]" })
-        });
-        document.getElementById('new-bus-no').value = '';
-        loadData();
-    }
-
-    async function uploadBulk() {
-        const fileInput = document.getElementById('bulk-csv');
-        if (!fileInput.files.length) return alert("Select CSV file first");
-
-        const formData = new FormData();
-        formData.append('file', fileInput.files[0]);
-
-        const res = await fetch('/api/buses/bulk', { method: 'POST', body: formData });
-        const data = await res.json();
-
-        if (data.success) {
-            alert(`Success! Added ${data.count} new buses.`);
-            fileInput.value = '';
-            loadData();
-        } else {
-            alert("Error: " + data.error);
-        }
-    }
-
-    async function addTransportUser() {
-        const name = document.getElementById('t-name').value;
-        const email = document.getElementById('t-email').value;
-        const pass = document.getElementById('t-pass').value;
-
-        if (!name || !email || !pass) return alert("All fields required");
-
-        const res = await fetch('/api/users/transport', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ name, email, password: pass })
-        });
-
-        if (res.ok) {
-            alert("Officer Added!");
-            document.getElementById('transport-modal').classList.add('hidden');
-            loadTransport();
-        } else {
-            alert("Error creating user");
-        }
-    }
-
+    // Transport Officers
     async function loadTransport() {
         try {
             const res = await fetch('/api/users/transport');
@@ -333,7 +363,7 @@
                 const div = document.createElement('div');
                 div.className = 'list-item';
                 div.innerHTML = `
-                    <div><strong>${u.name}</strong> <span class="text-xs text-muted">${u.email}</span></div>
+                    <div><strong>${u.name}</strong> <span class="text-xs text-muted"> - ${u.email}</span></div>
                     <span class="badge bg-green">Active</span>
                 `;
                 list.appendChild(div);
@@ -341,22 +371,30 @@
         } catch (e) { }
     }
 
-    function focusBus(lat, lon) {
-        map.flyTo([lat, lon], 16, { animate: true, duration: 1.5 });
+    async function addTransportUser() {
+        const name = document.getElementById('t-name').value;
+        const email = document.getElementById('t-email').value;
+        const pass = document.getElementById('t-pass').value;
+        if (!name || !email || !pass) return alert("All fields required");
+
+        const res = await fetch('/api/users/transport', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name, email, password: pass })
+        });
+        if (res.ok) {
+            alert("Added!");
+            document.getElementById('transport-modal').classList.add('hidden');
+            loadTransport();
+        } else { alert("Error adding user"); }
     }
 
-    // Initial Load
-    setInterval(loadData, 5000);
-    loadData();
-    loadTransport();
-    // --- SCHEDULE MANAGER LOGIC ---
+    // Schedule Logic
     let currentSchedBusId = null;
-
     async function openScheduleManager() {
         document.getElementById('schedule-modal').classList.remove('hidden');
-        // Load Buses into Select
         const select = document.getElementById('sched-bus-select');
-        if (select.options.length <= 1) { // Load only if not already loaded
+        if (select.options.length <= 1) {
             const res = await fetch('/api/buses');
             const buses = await res.json();
             buses.forEach(b => {
@@ -367,47 +405,34 @@
             });
         }
     }
-
     async function loadScheduleForBus() {
         const busId = document.getElementById('sched-bus-select').value;
         currentSchedBusId = busId;
         const container = document.getElementById('sched-rows');
         container.innerHTML = 'Loading...';
-
-        if (!busId) {
-            container.innerHTML = '<p class="text-xs text-muted text-center mt-4">Select a bus to view/edit schedule.</p>';
-            return;
-        }
+        if (!busId) { container.innerHTML = '<p class="text-xs text-muted text-center mt-4">Select a bus.</p>'; return; }
 
         try {
             const res = await fetch(`/api/schedules/${busId}`);
             const stops = await res.json();
             container.innerHTML = '';
-
-            if (stops.length === 0) {
-                // Add 3 default empty rows if empty
-                addSchedRow(); addSchedRow(); addSchedRow();
-            } else {
-                stops.forEach(s => addSchedRow(s.stop, s.time));
-            }
-        } catch (e) { container.innerHTML = 'Error loading'; }
+            if (stops.length === 0) { addSchedRow(); addSchedRow(); }
+            else { stops.forEach(s => addSchedRow(s.stop, s.time)); }
+        } catch (e) { container.innerHTML = 'Error'; }
     }
-
     function addSchedRow(stop = '', time = '') {
         const container = document.getElementById('sched-rows');
         const div = document.createElement('div');
         div.className = 'flex gap-2 mb-2 sched-row';
         div.innerHTML = `
             <input type="text" placeholder="Stop Name" class="p-2 border rounded flex-1 stop-input" value="${stop}">
-            <input type="text" placeholder="Time (e.g. 08:30 AM)" class="p-2 border rounded w-32 time-input" value="${time}">
+            <input type="text" placeholder="Time" class="p-2 border rounded w-32 time-input" value="${time}">
             <button onclick="this.parentElement.remove()" class="btn btn-sm btn-ghost text-danger">✕</button>
         `;
         container.appendChild(div);
     }
-
     async function saveSchedule() {
         if (!currentSchedBusId) return alert("Select a bus first");
-
         const rows = document.querySelectorAll('.sched-row');
         const payload = [];
         rows.forEach(r => {
@@ -415,29 +440,21 @@
             const t = r.querySelector('.time-input').value;
             if (s && t) payload.push({ stop: s, time: t });
         });
-
-        if (payload.length === 0) return alert("Add at least one stop");
-
-        // 1. Clear Old
         await fetch(`/api/schedules/${currentSchedBusId}`, { method: 'DELETE' });
-
-        // 2. Add New (Loop)
-        let successCount = 0;
         for (const item of payload) {
             await fetch('/api/schedules', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    bus_id: currentSchedBusId,
-                    stop: item.stop,
-                    time: item.time
-                })
+                body: JSON.stringify({ bus_id: currentSchedBusId, stop: item.stop, time: item.time })
             });
-            successCount++;
         }
-
-        alert(`Saved ${successCount} stops!`);
+        alert("Saved!");
         document.getElementById('schedule-modal').classList.add('hidden');
     }
+
+    // Init
+    loadData();
+    loadTransport();
+    setInterval(loadData, 5000);
 </script>
 {% endblock %}

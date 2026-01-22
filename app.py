@@ -94,10 +94,8 @@ class SOSAlert(db.Model):
     lat = db.Column(db.Float)
     lon = db.Column(db.Float)
     timestamp = db.Column(db.DateTime, default=datetime.utcnow)
-    lat = db.Column(db.Float)
-    lon = db.Column(db.Float)
-    timestamp = db.Column(db.DateTime, default=datetime.utcnow)
     resolved = db.Column(db.Boolean, default=False)
+    reason = db.Column(db.String(100), default="Emergency") # Added Reason
 
 class Schedule(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -116,13 +114,30 @@ def index():
 # ... (Routes continue) ...
 
 # --- INIT DB & SEED DATA ---
+def migrate_schema():
+    """Simple migration to add missing columns for existing DBs"""
+    with app.app_context():
+        # Check if 'reason' exists in sos_alert
+        try:
+            from sqlalchemy import text
+            with db.engine.connect() as conn:
+                conn.execute(text("SELECT reason FROM sos_alert LIMIT 1"))
+        except:
+            print("⚡ Migrating Schema: Adding 'reason' to sos_alert...")
+            try:
+                with db.engine.connect() as conn:
+                    conn.execute(text("ALTER TABLE sos_alert ADD COLUMN reason VARCHAR(100) DEFAULT 'Emergency'"))
+                    conn.commit()
+            except Exception as e:
+                print(f"Migration Error: {e}")
+
 def init_db_data():
     with app.app_context():
-        # Try to access the DB to check for schema validity
         # Try to access the DB to check for schema validity
         try:
             # Inspection query - will fail if tables don't exist
             db.create_all()
+            migrate_schema() # Run migration check
             if Bus.query.first() is not None: pass 
         except Exception as e:
             print(f"⚠️ Database connection verification failed: {e}")
@@ -167,6 +182,8 @@ def init_db_data():
 
 # Run Init
 init_db_data()
+
+# ... (Auth Routes) ...
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
@@ -382,7 +399,7 @@ def driver_update():
 # --- SOS ROUTES ---
 @app.route('/api/sos', methods=['POST'])
 def trigger_sos():
-    if session.get('role') not in ['driver', 'student']: return "Unauthorized", 403 # Allowing students too per request logic? "Make sure both admin and transport have access" -> Access to VIEW. "Map in driver... Sos button". Usually drivers SOS. User said "Sos button(make sure bith admin and transport have acess)". This likely means they receive it.
+    if session.get('role') not in ['driver', 'student']: return "Unauthorized", 403 
     
     data = request.json
     # Basic logic: Create alert
@@ -390,7 +407,8 @@ def trigger_sos():
         bus_id=data.get('bus_id'),
         driver_name=session.get('name'),
         lat=data.get('lat'),
-        lon=data.get('lon')
+        lon=data.get('lon'),
+        reason=data.get('reason', 'Emergency') # Store Reason
     )
     db.session.add(alert)
     db.session.commit()
@@ -407,6 +425,7 @@ def get_sos_history():
         'time': a.timestamp.strftime('%Y-%m-%d %H:%M:%S'),
         'lat': a.lat,
         'lon': a.lon,
+        'reason': a.reason, # Return Reason
         'resolved': a.resolved
     } for a in alerts])
 

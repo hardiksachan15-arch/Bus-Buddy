@@ -59,6 +59,16 @@
             <h4 class="text-danger flex items-center gap-2 mb-2">
                 <i data-lucide="alert-triangle" width="16"></i> EMERGENCY
             </h4>
+            <div class="mb-2">
+                <label class="text-xs font-bold text-danger uppercase">Reason</label>
+                <select id="sos-reason" class="w-full p-2 border border-danger rounded text-danger bg-white">
+                    <option value="Breakdown">Breakdown</option>
+                    <option value="Accident">Accident</option>
+                    <option value="Medical Emergency">Medical Emergency</option>
+                    <option value="Traffic/Route Blocked">Traffic/Route Blocked</option>
+                    <option value="Other">Other</option>
+                </select>
+            </div>
             <p class="text-xs text-muted mb-3">Pressing this sends an immediate alert to Admin & Transport Dept.</p>
             <button id="sos-btn" class="btn btn-danger w-full font-bold">
                 SEND SOS ALERT
@@ -203,22 +213,23 @@
     // SOS Logic
     document.getElementById('sos-btn').onclick = async () => {
         if (!activeBusId && !confirm("No active trip. Send SOS anyway?")) return;
+        const reason = document.getElementById('sos-reason').value;
 
         try {
             document.getElementById('sos-sound').play();
             if (!currentLat) {
-                navigator.geolocation.getCurrentPosition(p => sendSOS(p.coords.latitude, p.coords.longitude));
+                navigator.geolocation.getCurrentPosition(p => sendSOS(p.coords.latitude, p.coords.longitude, reason));
             } else {
-                sendSOS(currentLat, currentLon);
+                sendSOS(currentLat, currentLon, reason);
             }
         } catch (e) { alert("Error: " + e); }
     };
 
-    async function sendSOS(lat, lon) {
+    async function sendSOS(lat, lon, reason) {
         const res = await fetch('/api/sos', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ bus_id: activeBusId, lat, lon })
+            body: JSON.stringify({ bus_id: activeBusId, lat, lon, reason })
         });
         if (res.ok) alert("SOS SENT! Admins have been notified.");
     }

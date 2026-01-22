@@ -5,117 +5,189 @@
 {% block head %}
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+    .tab-btn {
+        padding: 10px 20px;
+        cursor: pointer;
+        border-bottom: 3px solid transparent;
+        color: var(--text-muted);
+        font-weight: 500;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+
+    .tab-btn.active {
+        border-bottom-color: var(--primary);
+        color: var(--primary);
+    }
+
+    .tab-content {
+        display: none;
+        animation: fadeIn 0.3s ease;
+    }
+
+    .tab-content.active {
+        display: block;
+    }
+
+    @keyframes fadeIn {
+        from {
+            opacity: 0;
+            transform: translateY(5px);
+        }
+
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+</style>
 {% endblock %}
 
 {% block content %}
-<div class="grid">
-    <!-- Header Stats -->
-    <div class="card col-span-3 flex items-center justify-between mb-4">
-        <div class="flex items-center gap-4">
-            <div style="background: var(--primary-light); padding: 12px; border-radius: 50%;">
-                <i data-lucide="radio" color="white" width="24"></i>
-            </div>
-            <div>
-                <h2 style="margin: 0; font-size: 1.5rem; color: var(--primary-dark);">Transport Control Center</h2>
-                <div class="text-xs text-muted">Real-time overview of active routes and drivers</div>
-            </div>
+<!-- Header -->
+<div class="card mb-4 flex justify-between items-center">
+    <div class="flex items-center gap-4">
+        <div style="background: var(--primary-light); padding: 12px; border-radius: 50%;">
+            <i data-lucide="radio" color="white" width="24"></i>
         </div>
-        <div class="badge bg-green px-4 py-2 text-sm">
-            <button class="btn btn-sm btn-ghost text-white" onclick="refreshData(); alert('Data Refreshed')">
-                <i data-lucide="refresh-cw" width="12"></i> Refresh
-            </button>
+        <div>
+            <h2 style="margin: 0; font-size: 1.5rem; color: var(--primary-dark);">Transport Control Center</h2>
+            <div class="text-xs text-muted">Real-time Operations & Fleet Management</div>
         </div>
     </div>
+    <button class="btn btn-sm btn-ghost" onclick="refreshData();">
+        <i data-lucide="refresh-cw" width="14"></i> Refresh Data
+    </button>
+</div>
 
-    <!-- Fleet Management Row (New) -->
-    <div class="card col-span-3 grid grid-cols-2 gap-4 mb-4"
-        style="background: linear-gradient(135deg, rgba(79, 70, 229, 0.05) 0%, rgba(255, 255, 255, 0) 100%); border: 1px solid var(--primary-light);">
-        <!-- Add Single Bus -->
-        <div>
-            <h3 class="flex items-center gap-2"><i data-lucide="plus-circle" class="text-primary"></i> Add New Bus</h3>
-            <div class="grid grid-cols-2 gap-2 mb-2">
-                <input type="text" id="new-bus-no" placeholder="Bus Number (e.g. DL-1C-001)" class="p-2 border rounded">
-                <input type="text" id="new-bus-route" placeholder="Route (e.g. Red Line)" class="p-2 border rounded">
-            </div>
-            <input type="text" id="new-bus-driver" placeholder="Driver Name (Optional)"
-                class="w-full p-2 border rounded mb-2">
-            <button onclick="addBus()" class="btn btn-primary w-full">Add Bus</button>
-        </div>
-
-        <!-- Bulk Upload -->
-        <div>
-            <h3 class="flex items-center gap-2"><i data-lucide="upload-cloud" class="text-secondary"></i> Bulk Upload
-                (CSV)</h3>
-            <div class="mb-2 text-xs text-muted">Attributes: Bus Number, Route Name, Driver Name (Optional)</div>
-            <div class="flex gap-2">
-                <input type="file" id="bulk-csv" accept=".csv" class="p-2 border rounded flex-1">
-                <button onclick="uploadBulk()" class="btn btn-secondary">Upload Fleet</button>
-            </div>
-            <a href="/static/sample_buses.csv" class="text-xs text-primary underline mt-1 block" download>Download
-                Sample CSV</a>
-        </div>
+<!-- Tabs -->
+<div class="card"
+    style="padding: 0; margin-bottom: 1.5rem; display: flex; gap: 1rem; border-bottom: 1px solid #eee; overflow: hidden;">
+    <div class="tab-btn active" onclick="switchTab('ops')"><i data-lucide="activity" width="16"></i> Live Operations
     </div>
+    <div class="tab-btn" onclick="switchTab('fleet')"><i data-lucide="bus" width="16"></i> Fleet Management</div>
+    <div class="tab-btn" onclick="switchTab('users')"><i data-lucide="users" width="16"></i> Drivers & Students</div>
+</div>
 
-    <!-- Analytics & Map Row -->
-    <div class="card col-span-3 grid grid-cols-3 gap-4">
-        <!-- Analytics Chart -->
-        <div class="col-span-1">
-            <h3 class="mb-2"><i data-lucide="pie-chart"></i> Fleet Analytics</h3>
-            <canvas id="fleetChart" width="200" height="200"></canvas>
-            <div id="analytics-stats" class="mt-4 grid grid-cols-2 gap-2 text-center text-xs">
-                <!-- Populated via JS -->
-            </div>
+<!-- TAB: OPS (Live Map & Stats) -->
+<div id="ops" class="tab-content active px-2">
+    <div class="grid" style="grid-template-columns: 3fr 1fr; gap: 1.5rem;">
+        <!-- Left: Map -->
+        <div class="card mb-0">
+            <h3 class="mb-2"><i data-lucide="map"></i> Live Tracking</h3>
+            <div id="map" style="height: 500px; width: 100%; border-radius: var(--radius-sm);"></div>
         </div>
 
-        <!-- Main Map -->
-        <div class="col-span-2">
-            <h3 class="mb-2 flex items-center gap-2">
-                <i data-lucide="map" class="text-primary"></i> Live Fleet Tracking
-                <button class="btn btn-sm btn-ghost ml-auto" onclick="map.invalidateSize()">Refresh Map</button>
-            </h3>
-            <div id="map" style="height: 350px; width: 100%; border-radius: var(--radius-sm);"></div>
-        </div>
-    </div>
-
-    <!-- Right Panel & Hierarchy -->
-    <div class="card col-span-3 grid grid-cols-2 gap-4">
-
-        <!-- Active Drivers List -->
-        <div>
-            <h3 class="flex items-center gap-2">
-                <i data-lucide="steering-wheel" class="text-primary"></i> Active Drivers
-            </h3>
-            <div id="driver-list" style="max-height: 250px; overflow-y: auto;">
-                <p class="text-muted text-center p-4">Loading active drivers...</p>
-            </div>
-        </div>
-
-        <!-- Hierarchy Management -->
-        <div>
-            <h3><i data-lucide="users" class="text-primary"></i> User Hierarchy</h3>
-            <input type="text" id="user-search" placeholder="Search Students/Drivers..."
-                class="w-full mb-2 p-2 border rounded" onkeyup="filterUsers()">
-            <div id="hierarchy-list" style="max-height: 250px; overflow-y: auto;">
-                <!-- Populated via JS -->
+        <!-- Right: Stats & Alerts -->
+        <div class="flex flex-col gap-4">
+            <!-- Analytics -->
+            <div class="card mb-0">
+                <h3 class="mb-2"><i data-lucide="pie-chart"></i> Fleet Status</h3>
+                <canvas id="fleetChart" width="200" height="200"></canvas>
+                <div id="analytics-stats" class="mt-4 grid grid-cols-2 gap-2 text-center text-xs"></div>
             </div>
 
-            <h3 class="mt-4 text-danger"><i data-lucide="alert-octagon"></i> SOS History</h3>
-            <div id="sos-list-transport" style="font-size: 0.85rem; max-height: 100px; overflow-y: auto;"></div>
+            <!-- SOS -->
+            <div class="card mb-0 bg-red-50 border-danger flex-1">
+                <h3 class="text-danger"><i data-lucide="alert-octagon"></i> SOS Alerts</h3>
+                <div id="sos-list-transport" class="overflow-y-auto" style="max-height: 250px;"></div>
+            </div>
         </div>
     </div>
 </div>
+
+<!-- TAB: FLEET (Add/Edit Buses) -->
+<div id="fleet" class="tab-content px-2">
+    <div class="grid grid-cols-3 gap-6">
+        <!-- Forms Column -->
+        <div class="col-span-1 flex flex-col gap-4">
+            <!-- Add Single -->
+            <div class="card border-primary">
+                <h3 class="flex items-center gap-2"><i data-lucide="plus-circle" class="text-primary"></i> Add New Bus
+                </h3>
+                <div class="grid grid-cols-2 gap-2 mb-2">
+                    <input type="text" id="new-bus-no" placeholder="Bus No. (DL-1C...)" class="p-2 border rounded">
+                    <input type="text" id="new-bus-route" placeholder="Route Name" class="p-2 border rounded">
+                </div>
+                <input type="text" id="new-bus-driver" placeholder="Assign Driver (Optional)"
+                    class="w-full p-2 border rounded mb-2">
+                <button onclick="addBus()" class="btn btn-primary w-full">Add Vehicle</button>
+            </div>
+
+            <!-- Bulk Upload -->
+            <div class="card">
+                <h3 class="flex items-center gap-2"><i data-lucide="upload-cloud"></i> Bulk Upload</h3>
+                <div class="mb-2 text-xs text-muted">CSV Fmt: Number, Route, Driver</div>
+                <div class="flex gap-2 mb-2">
+                    <input type="file" id="bulk-csv" accept=".csv" class="p-2 border rounded flex-1 w-full text-xs">
+                </div>
+                <button onclick="uploadBulk()" class="btn btn-secondary w-full">Upload CSV</button>
+                <a href="/static/sample_buses.csv" class="text-center text-xs text-primary underline mt-2 block"
+                    download>Download Sample</a>
+            </div>
+        </div>
+
+        <!-- List Column -->
+        <div class="card col-span-2">
+            <h3 class="mb-4"><i data-lucide="list"></i> Current Fleet Inventory</h3>
+            <div class="overflow-x-auto">
+                <table class="w-full text-sm text-left">
+                    <thead class="bg-gray text-muted uppercase font-bold">
+                        <tr>
+                            <th class="p-3 rounded-l-lg">Bus Number</th>
+                            <th class="p-3">Route</th>
+                            <th class="p-3">Driver</th>
+                            <th class="p-3">Status</th>
+                            <th class="p-3 rounded-r-lg">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="fleet-table-body">
+                        <!-- Populated via JS -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- TAB: USERS (Drivers/Students) -->
+<div id="users" class="tab-content px-2">
+    <div class="card">
+        <h3><i data-lucide="users"></i> User Directory (Drivers & Students)</h3>
+        <input type="text" id="user-search" placeholder="Search by name or role..."
+            class="w-full mb-4 p-2 border rounded max-w-md" onkeyup="filterUsers()">
+
+        <div id="hierarchy-grid" class="grid grid-cols-3 gap-3">
+            <!-- Populated via JS -->
+        </div>
+    </div>
+</div>
+
 {% endblock %}
 
 {% block scripts %}
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
+    // --- TABS LOGIC ---
+    function switchTab(tabId) {
+        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+        document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+
+        event.currentTarget.classList.add('active');
+        document.getElementById(tabId).classList.add('active');
+
+        if (tabId === 'ops') setTimeout(() => map.invalidateSize(), 100);
+    }
+
+    // --- MAP & DATA LOGIC ---
     const map = L.map('map').setView([28.6139, 77.2090], 12);
     L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
-        attribution: '&copy; OpenStreetMap &copy; CARTO'
+        attribution: '&copy; OpenStreetMap'
     }).addTo(map);
 
     let markers = {};
-    let polylines = {};
     let allUsers = [];
 
     // Chart Init
@@ -124,35 +196,28 @@
         type: 'doughnut',
         data: {
             labels: ['Active', 'Inactive'],
-            datasets: [{
-                data: [0, 0],
-                backgroundColor: ['#10B981', '#E5E7EB']
-            }]
+            datasets: [{ data: [0, 0], backgroundColor: ['#10B981', '#E5E7EB'] }]
         },
         options: { plugins: { legend: { position: 'bottom' } } }
     });
 
     async function refreshData() {
         try {
-            // 1. Analytics & Buses
+            // 1. Stats
             const resStats = await fetch('/api/analytics');
             const stats = await resStats.json();
-
-            // Update Chart
             fleetChart.data.datasets[0].data = [stats.buses.active, stats.buses.inactive];
             fleetChart.update();
-
-            // Update Stats Display
             document.getElementById('analytics-stats').innerHTML = `
-                <div class="bg-gray p-2 rounded"><strong>${stats.users.total}</strong><br>Users</div>
+                <div class="bg-gray p-2 rounded"><strong>${stats.users.drivers}</strong><br>Drivers</div>
                 <div class="bg-gray p-2 rounded"><strong>${stats.sos}</strong><br>SOS Alerts</div>
             `;
 
-            // 2. Map Logic & Drivers
-            const res = await fetch('/api/buses');
-            const buses = await res.json();
-            const activeBuses = buses.filter(b => b.status === 'active');
+            // 2. Buses (Map + Fleet Table)
+            const resBuses = await fetch('/api/buses');
+            const buses = await resBuses.json();
 
+            // Map
             buses.forEach(b => {
                 if (b.lat && b.lon && b.status === 'active') {
                     if (markers[b.id]) markers[b.id].setLatLng([b.lat, b.lon]);
@@ -161,144 +226,104 @@
                             className: 'transport-marker',
                             html: `<div style="background:#10B981; border:2px solid white; width:15px; height:15px; border-radius:50%; box-shadow:0 0 10px #10B981;"></div>`
                         });
-                        markers[b.id] = L.marker([b.lat, b.lon], { icon }).addTo(map)
-                            .bindPopup(`<b>${b.number}</b>`)
-                            .on('click', () => focusBus(b.lat, b.lon));
+                        markers[b.id] = L.marker([b.lat, b.lon], { icon }).addTo(map).bindPopup(`<b>${b.number}</b>`);
                     }
                 } else if (markers[b.id]) { map.removeLayer(markers[b.id]); delete markers[b.id]; }
-
-                if (b.coords && !polylines[b.id]) {
-                    try {
-                        const latlngs = JSON.parse(b.coords);
-                        polylines[b.id] = L.polyline(latlngs, { color: '#3b82f6', weight: 2 }).addTo(map);
-                    } catch (e) { }
-                }
             });
 
-            // Driver List
-            const list = document.getElementById('driver-list');
-            list.innerHTML = activeBuses.length ? '' : '<p class="text-muted text-center p-4">No active drivers</p>';
-            activeBuses.forEach(b => {
-                const item = document.createElement('div');
-                item.className = 'list-item';
-                // Click to zoom
-                item.style.cursor = 'pointer';
-                item.onclick = () => focusBus(b.lat, b.lon);
-
-                item.innerHTML = `
-                    <div>
-                        <strong>${b.driver}</strong>
-                        <div class="text-xs text-muted">Driving ${b.number} (${b.route})</div>
-                    </div>
-                    <span class="badge bg-green">Active</span>
+            // Fleet Table
+            const tbody = document.getElementById('fleet-table-body');
+            tbody.innerHTML = '';
+            buses.forEach(b => {
+                const tr = document.createElement('tr');
+                tr.className = 'border-b hover:bg-gray-50';
+                tr.innerHTML = `
+                    <td class="p-3 font-bold text-primary-dark">${b.number}</td>
+                    <td class="p-3">${b.route}</td>
+                    <td class="p-3 text-muted">${b.driver || '-'}</td>
+                    <td class="p-3"><span class="badge ${b.status === 'active' ? 'bg-green' : 'bg-gray'}">${b.status}</span></td>
+                    <td class="p-3">
+                        <button class="btn btn-sm btn-ghost text-muted" onclick="alert('Edit feature coming soon')"><i data-lucide="edit-2" width="14"></i></button>
+                    </td>
                 `;
-                list.appendChild(item);
+                tbody.appendChild(tr);
             });
 
-            // 3. Hierarchy - Load Once or Refresh
+            // 3. SOS
+            const resSOS = await fetch('/api/sos/history');
+            const alerts = await resSOS.json();
+            document.getElementById('sos-list-transport').innerHTML = alerts.slice(0, 10).map(a =>
+                `<div class="text-xs text-danger mb-2 p-2 bg-white rounded border border-red-100 shadow-sm">
+                    <div class="flex justify-between font-bold">
+                        <span>${a.driver}</span>
+                        <span>${a.time.split(' ')[1]}</span>
+                    </div>
+                    <div class="mt-1">Reason: <span class="bg-red-100 px-1 rounded text-red-800">${a.reason || 'Emergency'}</span></div>
+                 </div>`
+            ).join('');
+
+            // 4. Users (Once)
             if (allUsers.length === 0) {
-                const resUsers = await fetch('/api/users/general');
-                allUsers = await resUsers.json();
+                const resU = await fetch('/api/users/general');
+                allUsers = await resU.json();
                 filterUsers();
             }
-
-            // 4. SOS
-            const resSos = await fetch('/api/sos/history');
-            const alerts = await resSos.json();
-            document.getElementById('sos-list-transport').innerHTML = alerts.slice(0, 3).map(a =>
-                `<div class="text-xs text-danger mb-1"><strong>${a.driver}</strong> (${a.time})</div>`
-            ).join('');
 
             lucide.createIcons();
         } catch (e) { console.error(e); }
     }
 
-    function filterUsers() {
-        const q = document.getElementById('user-search').value.toLowerCase();
-        const list = document.getElementById('hierarchy-list');
-        list.innerHTML = '';
-
-        allUsers.filter(u => u.name.toLowerCase().includes(q) || u.role.includes(q)).forEach(u => {
-            const div = document.createElement('div');
-            div.className = 'list-item';
-            div.innerHTML = `
-                <div><strong>${u.name}</strong> <span class="text-xs text-muted">(${u.role})</span></div>
-                <div class="text-xs ${u.approved ? 'text-success' : 'text-danger'}">${u.approved ? 'Verified' : 'Pending'}</div>
-            `;
-            list.appendChild(div);
-        });
-    }
-
-    function focusBus(lat, lon) {
-        map.flyTo([lat, lon], 16, { animate: true, duration: 1.5 });
-    }
-
-    // --- FLEET MANAGEMENT JS ---
+    // --- FLEET ACTIONS ---
     async function addBus() {
         const no = document.getElementById('new-bus-no').value;
         const route = document.getElementById('new-bus-route').value;
         const driver = document.getElementById('new-bus-driver').value;
+        if (!no || !route) return alert("Bus Number & Route required");
 
-        if (!no || !route) return alert("Validation Error: Bus Number & Route are required.");
-
-        try {
-            const res = await fetch('/api/buses', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ number: no, route: route, driver_name: driver })
-            });
-            const data = await res.json();
-
-            if (res.ok) {
-                alert("Bus Added Successfully!");
-                document.getElementById('new-bus-no').value = '';
-                document.getElementById('new-bus-route').value = '';
-                document.getElementById('new-bus-driver').value = '';
-                refreshData();
-            } else {
-                alert("Error: " + (data.error || "Unknown error"));
-            }
-        } catch (e) { alert("Network Error"); }
+        await fetch('/api/buses', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ number: no, route: route, driver_name: driver })
+        });
+        alert("Bus Added");
+        document.getElementById('new-bus-no').value = '';
+        refreshData();
     }
 
     async function uploadBulk() {
         const fileInput = document.getElementById('bulk-csv');
-        if (!fileInput.files.length) return alert("Select a CSV file first.");
-
+        if (!fileInput.files.length) return alert("Select CSV");
         const formData = new FormData();
         formData.append('file', fileInput.files[0]);
-
-        try {
-            const res = await fetch('/api/buses/bulk', { method: 'POST', body: formData });
-            const data = await res.json();
-
-            if (res.ok) {
-                alert(`Bulk Upload Complete! Added ${data.count} buses.`);
-                refreshData();
-            } else {
-                alert("Upload Failed: " + (data.error || "Check file format"));
-            }
-        } catch (e) { alert("Upload Error"); }
+        const res = await fetch('/api/buses/bulk', { method: 'POST', body: formData });
+        const data = await res.json();
+        alert(data.success ? `Added ${data.count} buses` : "Error: " + data.error);
+        refreshData();
     }
 
-    setInterval(refreshData, 5000);
+    // --- USER SEARCH ---
+    function filterUsers() {
+        const q = document.getElementById('user-search').value.toLowerCase();
+        const grid = document.getElementById('hierarchy-grid');
+        grid.innerHTML = '';
+
+        allUsers.filter(u => u.name.toLowerCase().includes(q) || u.role.includes(q)).forEach(u => {
+            const div = document.createElement('div');
+            div.className = 'card p-3 mb-0 flex items-center justify-between';
+            div.innerHTML = `
+                <div>
+                    <div class="font-bold text-sm">${u.name}</div>
+                    <div class="text-xs text-muted font-mono">${u.role}</div>
+                </div>
+                <div class="text-xs ${u.approved ? 'text-success' : 'text-danger'} font-bold">
+                    ${u.approved ? 'ACTIVE' : 'PENDING'}
+                </div>
+            `;
+            grid.appendChild(div);
+        });
+    }
+
     refreshData();
-
+    setInterval(refreshData, 5000);
 </script>
-<style>
-    /* Pulse Animation for Header Icon */
-    @keyframes pulse {
-        0% {
-            opacity: 1;
-        }
-
-        50% {
-            opacity: 0.5;
-        }
-
-        100% {
-            opacity: 1;
-        }
-    }
-</style>
 {% endblock %}
