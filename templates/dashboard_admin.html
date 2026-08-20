@@ -80,11 +80,11 @@
 <!-- Tabs Navigation -->
 <div class="card"
     style="padding: 0; margin-bottom: 1.5rem; display: flex; gap: 1rem; border-bottom: 1px solid #eee; overflow: hidden;">
-    <div class="tab-btn active" onclick="switchTab('overview')"><i data-lucide="layout-dashboard" width="16"></i>
+    <div class="tab-btn active" onclick="switchTab('overview', this)"><i data-lucide="layout-dashboard" width="16"></i>
         Overview</div>
-    <div class="tab-btn" onclick="switchTab('users')"><i data-lucide="users" width="16"></i> User Management</div>
-    <div class="tab-btn" onclick="switchTab('transport')"><i data-lucide="shield" width="16"></i> Transport Dept</div>
-    <div class="tab-btn" onclick="switchTab('fleet')"><i data-lucide="bus" width="16"></i> Fleet Status</div>
+    <div class="tab-btn" onclick="switchTab('users', this)"><i data-lucide="users" width="16"></i> User Management</div>
+    <div class="tab-btn" onclick="switchTab('transport', this)"><i data-lucide="shield" width="16"></i> Transport Dept</div>
+    <div class="tab-btn" onclick="switchTab('fleet', this)"><i data-lucide="bus" width="16"></i> Fleet Status</div>
 </div>
 
 <!-- TAB: OVERVIEW -->
@@ -95,7 +95,7 @@
             <div class="flex justify-between items-center mb-2">
                 <h3><i data-lucide="map"></i> Live Fleet Overview</h3>
                 <div class="flex gap-2">
-                    <button class="btn btn-sm btn-ghost" onclick="map.invalidateSize();"> <!-- Removed Alert -->
+                    <button class="btn btn-sm btn-ghost" onclick="if (typeof map !== 'undefined') map.invalidateSize();"> <!-- Removed Alert -->
                         <i data-lucide="refresh-cw" width="14"></i>
                     </button>
                     <span class="badge bg-green">Live Updates On</span>
@@ -135,8 +135,6 @@
             </table>
         </div>
 
-        <h3 class="mt-8 mb-4">Pending Approvals</h3>
-        <div id="pending-list" class="grid grid-cols-2 gap-2"></div>
     </div>
 </div>
 
@@ -222,14 +220,15 @@
 {% block scripts %}
 <script>
     // --- TABS LOGIC ---
-    function switchTab(tabId) {
+    function switchTab(tabId, el) {
         document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
         document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
 
-        event.currentTarget.classList.add('active');
-        document.getElementById(tabId).classList.add('active');
+        if (el && el.classList) el.classList.add('active');
+        const tab = document.getElementById(tabId);
+        if (tab) tab.classList.add('active');
 
-        if (tabId === 'overview') setTimeout(() => map.invalidateSize(), 100);
+        if (tabId === 'overview') setTimeout(() => { if (typeof map !== 'undefined' && map.invalidateSize) map.invalidateSize(); }, 100);
     }
 
     // --- MAP & DATA LOGIC ---
@@ -247,109 +246,91 @@
             const buses = await resBuses.json();
 
             // Stats
-            document.getElementById('stat-total').innerText = buses.length;
-            document.getElementById('stat-active').innerText = buses.filter(b => b.status === 'active').length;
+            document.getElementById('stat-total').innerText = (buses && buses.length) ? buses.length : 0;
+            document.getElementById('stat-active').innerText = (Array.isArray(buses) ? buses.filter(b => b.status === 'active').length : 0);
 
             // Bus Grid (Flagship Tab)
             const busGrid = document.getElementById('bus-grid');
-            busGrid.innerHTML = '';
-            buses.forEach(b => {
-                // Map Logic
-                if (b.lat && b.lon && b.status === 'active') {
-                    if (markers[b.id]) markers[b.id].setLatLng([b.lat, b.lon]);
-                    else markers[b.id] = L.marker([b.lat, b.lon]).addTo(map).bindPopup(`<b>${b.number}</b>`);
-                } else if (markers[b.id]) { map.removeLayer(markers[b.id]); delete markers[b.id]; }
+            if (busGrid) {
+                busGrid.innerHTML = '';
+                (buses || []).forEach(b => {
+                    // Map Logic
+                    if (b && b.lat && b.lon && b.status === 'active') {
+                        if (markers[b.id]) markers[b.id].setLatLng([b.lat, b.lon]);
+                        else markers[b.id] = L.marker([b.lat, b.lon]).addTo(map).bindPopup(`<b>${b.number}</b>`);
+                    } else if (b && markers[b.id]) { map.removeLayer(markers[b.id]); delete markers[b.id]; }
 
-                // Grid Logic
-                const div = document.createElement('div');
-                div.className = 'list-item p-3 border rounded bg-gray-50';
-                div.innerHTML = `
-                    <div class="flex justify-between items-center">
-                        <strong>${b.number}</strong>
-                        <span class="badge ${b.status === 'active' ? 'bg-green' : 'bg-gray'}">${b.status}</span>
-                    </div>
-                    <div class="text-xs text-muted mt-1">${b.route}</div>
-                    <div class="text-xs mt-2 font-mono">${b.driver || 'No Driver'}</div>
-                `;
-                busGrid.appendChild(div);
-            });
+                    // Grid Logic
+                    const div = document.createElement('div');
+                    div.className = 'list-item p-3 border rounded bg-gray-50';
+                    div.innerHTML = `
+                        <div class="flex justify-between items-center">
+                            <strong>${b.number}</strong>
+                            <span class="badge ${b.status === 'active' ? 'bg-green' : 'bg-gray'}">${b.status}</span>
+                        </div>
+                        <div class="text-xs text-muted mt-1">${b.route}</div>
+                        <div class="text-xs mt-2 font-mono">${b.driver || 'No Driver'}</div>
+                    `;
+                    busGrid.appendChild(div);
+                });
+            }
 
             // 2. SOS
-            const resSOS = await fetch('/api/sos/history');
-            const alerts = await resSOS.json();
-            document.getElementById('stat-sos').innerText = alerts.length;
+            try {
+                const resSOS = await fetch('/api/sos/history');
+                const alerts = await resSOS.json();
+                document.getElementById('stat-sos').innerText = (alerts && alerts.length) ? alerts.length : 0;
 
-            const sosList = document.getElementById('sos-list');
-            sosList.innerHTML = alerts.length ? '' : '<p class="text-xs text-muted">No alerts.</p>';
-            alerts.slice(0, 10).forEach(a => {
-                const div = document.createElement('div');
-                div.className = 'list-item';
-                div.style.background = '#fff';
-                div.innerHTML = `
-                    <div>
-                        <div class="text-danger flex items-center gap-2 font-bold text-sm">
-                            <i data-lucide="alert-circle" width="14"></i> ${a.driver}
-                        </div>
-                        <div class="text-xs font-bold text-danger mt-1">Reason: ${a.reason || 'Emergency'}</div>
-                        <div class="text-xs text-muted">${a.time}</div>
-                    </div>
-                    <a href="https://maps.google.com/?q=${a.lat},${a.lon}" target="_blank" class="text-xs btn btn-sm btn-ghost">Map</a>
-                `;
-                sosList.appendChild(div);
-            });
+                const sosList = document.getElementById('sos-list');
+                if (sosList) {
+                    sosList.innerHTML = (alerts && alerts.length) ? '' : '<p class="text-xs text-muted">No alerts.</p>';
+                    (alerts || []).slice(0, 10).forEach(a => {
+                        const div = document.createElement('div');
+                        div.className = 'list-item';
+                        div.style.background = '#fff';
+                        div.innerHTML = `
+                            <div>
+                                <div class="text-danger flex items-center gap-2 font-bold text-sm">
+                                    <i data-lucide="alert-circle" width="14"></i> ${a.driver}
+                                </div>
+                                <div class="text-xs font-bold text-danger mt-1">Reason: ${a.reason || 'Emergency'}</div>
+                                <div class="text-xs text-muted">${a.time}</div>
+                            </div>
+                            <a href="https://maps.google.com/?q=${a.lat},${a.lon}" target="_blank" class="text-xs btn btn-sm btn-ghost">Map</a>
+                        `;
+                        sosList.appendChild(div);
+                    });
+                }
+            } catch (e) {
+                console.warn('Failed to load SOS history', e);
+            }
 
-            // 3. User Approvals
-            const resPending = await fetch('/api/users/pending');
-            const pending = await resPending.json();
-            const pendingList = document.getElementById('pending-list');
-            pendingList.innerHTML = pending.length ? '' : '<p class="text-xs text-muted col-span-2">No pending approvals.</p>';
-
-            pending.forEach(u => {
-                const div = document.createElement('div');
-                div.className = 'list-item';
-                div.innerHTML = `
-                    <div><strong>${u.name}</strong> <span class="text-xs text-muted">(${u.role})</span></div>
-                    <div class="flex gap-1">
-                        <button onclick="approve(${u.id}, true)" class="btn btn-sm btn-success">✓</button>
-                        <button onclick="approve(${u.id}, false)" class="btn btn-sm btn-danger">✗</button>
-                    </div>
-                `;
-                pendingList.appendChild(div);
-            });
-
-            // 4. All Users Table
-            // Only fetch if "Users" tab is active or first load to simple-populate? 
-            // Better: fetch always for simplicity in this prototype.
+            // 3. All Users Table
             const resAll = await fetch('/api/users/all');
             const allUsers = await resAll.json();
             const tableBody = document.getElementById('users-table-body');
-            tableBody.innerHTML = '';
+            if (tableBody) {
+                tableBody.innerHTML = '';
+                (allUsers || []).forEach(u => {
+                    const tr = document.createElement('tr');
+                    tr.className = 'border-b';
+                    tr.innerHTML = `
+                        <td class="p-3 font-bold">${u.name}</td>
+                        <td class="p-3 text-muted">${u.email}</td>
+                        <td class="p-3"><span class="badge bg-gray">${u.role}</span></td>
+                        <td class="p-3"><span class="badge ${u.approved ? 'bg-green' : 'bg-red'}">${u.approved ? 'Active' : 'Pending'}</span></td>
+                    `;
+                    tableBody.appendChild(tr);
+                });
+            }
 
-            allUsers.forEach(u => {
-                const tr = document.createElement('tr');
-                tr.className = 'border-b';
-                tr.innerHTML = `
-                    <td class="p-3 font-bold">${u.name}</td>
-                    <td class="p-3 text-muted">${u.email}</td>
-                    <td class="p-3"><span class="badge bg-gray">${u.role}</span></td>
-                    <td class="p-3"><span class="badge ${u.approved ? 'bg-green' : 'bg-red'}">${u.approved ? 'Active' : 'Pending'}</span></td>
-                `;
-                tableBody.appendChild(tr);
-            });
-
-            lucide.createIcons();
+            if (typeof lucide !== 'undefined' && lucide.createIcons) lucide.createIcons();
 
         } catch (e) { console.error(e); }
     }
 
-    async function approve(id, status) {
-        await fetch('/api/users/approve', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ user_id: id, approved: status })
-        });
-        loadData();
-    }
+    // Note: admin approval UI removed so identities don't require dashboard approval. Make sure server-side
+    // registration endpoint auto-approves or sets appropriate default roles.
 
     // Transport Officers
     async function loadTransport() {
@@ -357,9 +338,9 @@
             const res = await fetch('/api/users/transport');
             const users = await res.json();
             const list = document.getElementById('transport-list');
-            list.innerHTML = users.length ? '' : '<p class="text-xs text-muted mb-2">No officers found.</p>';
+            if (list) list.innerHTML = (users && users.length) ? '' : '<p class="text-xs text-muted mb-2">No officers found.</p>';
 
-            users.forEach(u => {
+            (users || []).forEach(u => {
                 const div = document.createElement('div');
                 div.className = 'list-item';
                 div.innerHTML = `
@@ -368,7 +349,7 @@
                 `;
                 list.appendChild(div);
             });
-        } catch (e) { }
+        } catch (e) { console.error('Failed to load transport officers', e); }
     }
 
     async function addTransportUser() {
@@ -377,16 +358,18 @@
         const pass = document.getElementById('t-pass').value;
         if (!name || !email || !pass) return alert("All fields required");
 
-        const res = await fetch('/api/users/transport', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ name, email, password: pass })
-        });
-        if (res.ok) {
-            alert("Added!");
-            document.getElementById('transport-modal').classList.add('hidden');
-            loadTransport();
-        } else { alert("Error adding user"); }
+        try {
+            const res = await fetch('/api/users/transport', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name, email, password: pass })
+            });
+            if (res.ok) {
+                alert("Added!");
+                document.getElementById('transport-modal').classList.add('hidden');
+                loadTransport();
+            } else { alert("Error adding user"); }
+        } catch (e) { console.error(e); alert('Error adding user'); }
     }
 
     // Schedule Logic
@@ -394,34 +377,39 @@
     async function openScheduleManager() {
         document.getElementById('schedule-modal').classList.remove('hidden');
         const select = document.getElementById('sched-bus-select');
-        if (select.options.length <= 1) {
-            const res = await fetch('/api/buses');
-            const buses = await res.json();
-            buses.forEach(b => {
-                const opt = document.createElement('option');
-                opt.value = b.id;
-                opt.text = `${b.number} - ${b.route}`;
-                select.appendChild(opt);
-            });
+        if (select && select.options.length <= 1) {
+            try {
+                const res = await fetch('/api/buses');
+                const buses = await res.json();
+                (buses || []).forEach(b => {
+                    const opt = document.createElement('option');
+                    opt.value = b.id;
+                    opt.text = `${b.number} - ${b.route}`;
+                    select.appendChild(opt);
+                });
+            } catch (e) { console.error('Failed to load buses for schedule manager', e); }
         }
     }
     async function loadScheduleForBus() {
         const busId = document.getElementById('sched-bus-select').value;
         currentSchedBusId = busId;
         const container = document.getElementById('sched-rows');
-        container.innerHTML = 'Loading...';
-        if (!busId) { container.innerHTML = '<p class="text-xs text-muted text-center mt-4">Select a bus.</p>'; return; }
+        if (container) container.innerHTML = 'Loading...';
+        if (!busId) { if (container) container.innerHTML = '<p class="text-xs text-muted text-center mt-4">Select a bus.</p>'; return; }
 
         try {
             const res = await fetch(`/api/schedules/${busId}`);
             const stops = await res.json();
-            container.innerHTML = '';
-            if (stops.length === 0) { addSchedRow(); addSchedRow(); }
-            else { stops.forEach(s => addSchedRow(s.stop, s.time)); }
-        } catch (e) { container.innerHTML = 'Error'; }
+            if (container) {
+                container.innerHTML = '';
+                if (!stops || stops.length === 0) { addSchedRow(); addSchedRow(); }
+                else { stops.forEach(s => addSchedRow(s.stop, s.time)); }
+            }
+        } catch (e) { if (container) container.innerHTML = 'Error'; console.error(e); }
     }
     function addSchedRow(stop = '', time = '') {
         const container = document.getElementById('sched-rows');
+        if (!container) return;
         const div = document.createElement('div');
         div.className = 'flex gap-2 mb-2 sched-row';
         div.innerHTML = `
@@ -440,16 +428,18 @@
             const t = r.querySelector('.time-input').value;
             if (s && t) payload.push({ stop: s, time: t });
         });
-        await fetch(`/api/schedules/${currentSchedBusId}`, { method: 'DELETE' });
-        for (const item of payload) {
-            await fetch('/api/schedules', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ bus_id: currentSchedBusId, stop: item.stop, time: item.time })
-            });
-        }
-        alert("Saved!");
-        document.getElementById('schedule-modal').classList.add('hidden');
+        try {
+            await fetch(`/api/schedules/${currentSchedBusId}`, { method: 'DELETE' });
+            for (const item of payload) {
+                await fetch('/api/schedules', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ bus_id: currentSchedBusId, stop: item.stop, time: item.time })
+                });
+            }
+            alert("Saved!");
+            document.getElementById('schedule-modal').classList.add('hidden');
+        } catch (e) { console.error('Failed to save schedule', e); alert('Failed to save schedule'); }
     }
 
     // Init
